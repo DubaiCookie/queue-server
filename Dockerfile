@@ -1,5 +1,5 @@
 ## OpenJDK 21 사용
-FROM openjdk:21
+FROM eclipse-temurin:21-jdk
 
 # 컨테이너 내의 작업 디렉토리 설정
 WORKDIR /app
