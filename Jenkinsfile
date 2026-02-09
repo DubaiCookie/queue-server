@@ -114,10 +114,9 @@ pipeline {
                 ]) {
                     echo '배포 서버 이미지 prune'
                     sh '''
-                        ssh -p "$DEPLOY_PORT" -i "$SSH_KEY" -o StrictHostKeyChecking=no \
-                        "$DEPLOY_USERNAME@$DEPLOY_IP" << 'EOF'
-                        docker image prune -f
-                        EOF
+                    ssh -p "$DEPLOY_PORT" -i "$SSH_KEY" -o StrictHostKeyChecking=no \
+                    "$DEPLOY_USERNAME@$DEPLOY_IP" \
+                    "docker image prune -f"
                     '''
                 }
             }
@@ -136,11 +135,9 @@ pipeline {
                 ]) {
                     echo '배포 서버 docker-compose pull'
                     sh '''
-                        ssh -p "$DEPLOY_PORT" -i "$SSH_KEY" -o StrictHostKeyChecking=no \
-                        "$DEPLOY_USERNAME@$DEPLOY_IP" << 'EOF'
-                        cd "$DEPLOY_DIR"
-                        docker-compose pull
-                        EOF
+                    ssh -p "$DEPLOY_PORT" -i "$SSH_KEY" -o StrictHostKeyChecking=no \
+                    "$DEPLOY_USERNAME@$DEPLOY_IP" \
+                    "cd \"$DEPLOY_DIR\" && docker-compose pull"
                     '''
                 }
             }
@@ -159,11 +156,9 @@ pipeline {
                 ]) {
                     echo '배포 서버 docker-compose up'
                     sh '''
-                        ssh -p "$DEPLOY_PORT" -i "$SSH_KEY" -o StrictHostKeyChecking=no \
-                        "$DEPLOY_USERNAME@$DEPLOY_IP" << 'EOF'
-                        cd "$DEPLOY_DIR"
-                        docker-compose up -d
-                        EOF
+                    ssh -p "$DEPLOY_PORT" -i "$SSH_KEY" -o StrictHostKeyChecking=no \
+                    "$DEPLOY_USERNAME@$DEPLOY_IP" \
+                    "cd \"$DEPLOY_DIR\" && docker-compose up -d"
                     '''
                 }
             }
