@@ -1,7 +1,7 @@
 pipeline {
 	agent any
 	environment {
-        IMAGE_NAME = 'skala-mini/queue-server'
+        IMAGE_NAME = 'jinyoung1226/queue-server'
         DEPLOY_DIR = '/home/jinyoung/skala-mini/queue-server'
     }
 
