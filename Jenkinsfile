@@ -1,8 +1,8 @@
 pipeline {
 	agent any
 	environment {
-        IMAGE_NAME = 'skala-mini/mocamp-back'
-        DEPLOY_DIR = '/home/jinyoung/mocamp'
+        IMAGE_NAME = 'skala-mini/queue-server'
+        DEPLOY_DIR = '/home/jinyoung/skala-mini/queue-server'
     }
 
 	stages {
@@ -67,11 +67,11 @@ pipeline {
 				script {
 					echo "기존 이미지 삭제"
                     sh '''
-            		if [ "$(docker images -q mocamp-back)" ]; then
-                		docker rmi -f $(docker images -q mocamp-back)
-                		echo " mocamp-back 이미지 삭제 완료"
+            		if [ "$(docker images -q queue-server)" ]; then
+                		docker rmi -f $(docker images -q queue-server)
+                		echo " queue-server 이미지 삭제 완료"
             		else
-                		echo " mocamp-back 이미지가 존재하지 않습니다."
+                		echo " queue-server 이미지가 존재하지 않습니다."
             		fi
             		'''
 				}
@@ -99,7 +99,27 @@ pipeline {
 			}
 		}
 
-		stage('09. 푸시한 이미지 불러오기') {
+		stage('09. 배포 서버에서 사용 안 하는 이미지 정리') {
+            steps {
+                withCredentials([
+                    sshUserPrivateKey(credentialsId: 'deploy-server-ssh', keyFileVariable: 'SSH_KEY'),
+                    string(credentialsId: 'deploy-server-ip', variable: 'DEPLOY_IP'),
+                    string(credentialsId: 'deploy-server-username', variable: 'DEPLOY_USERNAME'),
+                    string(credentialsId: 'deploy-server-port', variable: 'DEPLOY_PORT')
+                ]) {
+                    script {
+                        echo "배포 서버에서 사용 안 하는 Docker 이미지 정리"
+                        sh """
+                        ssh -p ${DEPLOY_PORT} -i ${SSH_KEY} -o StrictHostKeyChecking=no ${DEPLOY_USERNAME}@${DEPLOY_IP} '
+                        docker image prune -f
+                        '
+                        """
+                    }
+                }
+            }
+        }
+
+		stage('10. 푸시한 이미지 불러오기') {
 			steps {
 				withCredentials([
 					sshUserPrivateKey(credentialsId: 'deploy-server-ssh', keyFileVariable: 'SSH_KEY'),
@@ -120,7 +140,7 @@ pipeline {
 			}
 		}
 
-		stage('10. 새로운 docker-compose.yml로 컨테이너 띄우기') {
+		stage('11. 새로운 docker-compose.yml로 컨테이너 띄우기') {
 			steps {
 				withCredentials([
 					sshUserPrivateKey(credentialsId: 'deploy-server-ssh', keyFileVariable: 'SSH_KEY'),
@@ -133,7 +153,7 @@ pipeline {
                         sh """
                         	ssh -p ${DEPLOY_PORT} -i ${SSH_KEY} -o StrictHostKeyChecking=no ${DEPLOY_USERNAME}@${DEPLOY_IP} '
                         	cd ${DEPLOY_DIR}
-                        	docker-compose up --build -d || exit 1
+                        	docker-compose up -d || exit 1
                         	'
                         """
                     }
