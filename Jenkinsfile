@@ -93,11 +93,9 @@ pipeline {
                 ]) {
                     echo '원격 서버 docker-compose down'
                     sh '''
-                        ssh -p "$DEPLOY_PORT" -i "$SSH_KEY" -o StrictHostKeyChecking=no \
-                        "$DEPLOY_USERNAME@$DEPLOY_IP" << 'EOF'
-                        cd "$DEPLOY_DIR"
-                        docker-compose down || true
-                        EOF
+                    ssh -p "$DEPLOY_PORT" -i "$SSH_KEY" -o StrictHostKeyChecking=no \
+                    "$DEPLOY_USERNAME@$DEPLOY_IP" \
+                    "cd "$DEPLOY_DIR" && docker-compose down || true"
                     '''
                 }
             }
