@@ -6,7 +6,14 @@ pipeline {
     }
 
 	stages {
-
+		stage('01. git으로 소스코드 불러오기') {
+			steps {
+				script {
+					echo "Git에서 코드 가져오기"
+					checkout scm
+				}
+			}
+		}
 
 		stage('02. Gradlew 권한 허용') {
 			steps {
