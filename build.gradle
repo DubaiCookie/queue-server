@@ -25,21 +25,33 @@ repositories {
 }
 
 dependencies {
-	implementation 'org.springframework.boot:spring-boot-starter-actuator'
+	// === Core Web (REST API) ===
+	implementation 'org.springframework.boot:spring-boot-starter-web'
+
+	// === Redis (Queue 핵심) ===
 	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
-	implementation 'org.springframework.boot:spring-boot-starter-security'
+
+	// === Validation (요청 검증) ===
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
-	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
-	implementation 'org.springframework.boot:spring-boot-starter-websocket'
+
+	// === Actuator (health 체크용, 선택이지만 추천) ===
+	implementation 'org.springframework.boot:spring-boot-starter-actuator'
+
+	// Swagger (OpenAPI 3)
+	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.5.0'
+
+	// === Lombok ===
 	compileOnly 'org.projectlombok:lombok'
 	annotationProcessor 'org.projectlombok:lombok'
-	testImplementation 'org.springframework.boot:spring-boot-starter-actuator-test'
-	testImplementation 'org.springframework.boot:spring-boot-starter-data-redis-test'
-	testImplementation 'org.springframework.boot:spring-boot-starter-security-test'
-	testImplementation 'org.springframework.boot:spring-boot-starter-validation-test'
-	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
-	testImplementation 'org.springframework.boot:spring-boot-starter-websocket-test'
-	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+	// WebClient
+	implementation 'org.springframework.boot:spring-boot-starter-webflux'
+
+	// === Test ===
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+
+	// === Kafka ===
+	implementation 'org.springframework.kafka:spring-kafka'
 }
 
 tasks.named('test') {
