@@ -2,6 +2,7 @@ package com.skala.queue_server.controller;
 
 import com.skala.queue_server.dto.enqueue.EnqueueRequest;
 import com.skala.queue_server.dto.enqueue.EnqueueResponse;
+import com.skala.queue_server.dto.ride.RideQueueInfoListResponse;
 import com.skala.queue_server.dto.status.QueueStatusListResponse;
 import com.skala.queue_server.service.QueueService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -73,6 +74,32 @@ public class QueueController {
         logger.info("사용자 전체 대기열 상태 조회 요청 - 사용자={}", userId);
         QueueStatusListResponse response = queueService.getAllStatus(userId);
         logger.info("사용자 전체 대기열 상태 조회 응답 - 항목수={}", response.items().size());
+        return response;
+    }
+
+    @Operation(
+            summary = "모든 놀이기구 대기열 정보 조회",
+            description = "모든 놀이기구의 프리미엄/일반 대기열의 대기 인원과 예상 대기 시간을 리스트로 반환합니다."
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "조회 성공",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = RideQueueInfoListResponse.class)
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "500",
+                    description = "서버 내부 오류"
+            )
+    })
+    @GetMapping("/rides/info")
+    public RideQueueInfoListResponse getAllRidesQueueInfo() {
+        logger.info("모든 놀이기구 대기열 정보 조회 요청");
+        RideQueueInfoListResponse response = queueService.getAllRidesQueueInfo();
+        logger.info("모든 놀이기구 대기열 정보 조회 응답 - 놀이기구수={}", response.rides().size());
         return response;
     }
 }

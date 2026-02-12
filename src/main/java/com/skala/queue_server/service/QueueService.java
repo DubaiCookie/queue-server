@@ -1,6 +1,9 @@
 package com.skala.queue_server.service;
 
 import com.skala.queue_server.dto.enqueue.EnqueueResponse;
+import com.skala.queue_server.dto.ride.RideQueueInfoDto;
+import com.skala.queue_server.dto.ride.RideQueueInfoListResponse;
+import com.skala.queue_server.dto.ride.RideWaitTimeDto;
 import com.skala.queue_server.dto.status.QueueStatusItem;
 import com.skala.queue_server.dto.status.QueueStatusListResponse;
 import lombok.RequiredArgsConstructor;
@@ -12,6 +15,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -102,6 +106,62 @@ public class QueueService {
             }
         }
         return new QueueStatusListResponse(userId, items);
+    }
+
+    /**
+     * 모든 놀이기구의 대기열 정보 조회
+     * 각 놀이기구의 프리미엄/일반 대기열 인원과 예상 대기시간을 계산하여 반환
+     */
+    public RideQueueInfoListResponse getAllRidesQueueInfo() {
+        logger.info("모든 놀이기구 대기열 정보 조회 시작");
+
+        // Redis에서 모든 놀이기구 메타 키 조회
+        Set<String> metaKeys = redisTemplate.keys(META_KEY_PREFIX + "*");
+        if (metaKeys == null || metaKeys.isEmpty()) {
+            logger.info("놀이기구 메타 정보 없음");
+            return new RideQueueInfoListResponse(List.of());
+        }
+
+        List<RideQueueInfoDto> rideInfos = new ArrayList<>();
+
+        for (String metaKey : metaKeys) {
+            try {
+                // 놀이기구 ID 추출
+                String rideIdStr = metaKey.replace(META_KEY_PREFIX, "");
+                int rideId = Integer.parseInt(rideIdStr);
+
+                // 메타 정보 로드
+                Meta meta = loadRideMeta((long) rideId);
+
+                // 프리미엄/일반 대기열 정보 조회
+                List<RideWaitTimeDto> waitTimes = new ArrayList<>();
+
+                // PREMIUM 대기열
+                String premiumKey = buildQueueKey((long) rideId, "PREMIUM");
+                Long premiumCount = redisTemplate.opsForZSet().size(premiumKey);
+                int premiumWaitingCount = premiumCount != null ? premiumCount.intValue() : 0;
+                int premiumWaitMinutes = (int) calculateEstimatedMinutes(premiumWaitingCount, meta);
+                waitTimes.add(new RideWaitTimeDto("PREMIUM", premiumWaitingCount, premiumWaitMinutes));
+
+                // GENERAL 대기열
+                String generalKey = buildQueueKey((long) rideId, "GENERAL");
+                Long generalCount = redisTemplate.opsForZSet().size(generalKey);
+                int generalWaitingCount = generalCount != null ? generalCount.intValue() : 0;
+                int generalWaitMinutes = (int) calculateEstimatedMinutes(generalWaitingCount, meta);
+                waitTimes.add(new RideWaitTimeDto("GENERAL", generalWaitingCount, generalWaitMinutes));
+
+                rideInfos.add(new RideQueueInfoDto(rideId, waitTimes));
+
+                logger.info("놀이기구 대기열 정보 - 놀이기구={} 프리미엄대기={}명({}분) 일반대기={}명({}분)",
+                    rideId, premiumWaitingCount, premiumWaitMinutes, generalWaitingCount, generalWaitMinutes);
+
+            } catch (Exception e) {
+                logger.error("놀이기구 대기열 정보 조회 실패 - 키={}", metaKey, e);
+            }
+        }
+
+        logger.info("모든 놀이기구 대기열 정보 조회 완료 - 총 {}개", rideInfos.size());
+        return new RideQueueInfoListResponse(rideInfos);
     }
 
     // ===== 책임별 내부 메서드 =====
