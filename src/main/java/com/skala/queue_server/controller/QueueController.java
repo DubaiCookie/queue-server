@@ -102,4 +102,34 @@ public class QueueController {
         logger.info("모든 놀이기구 대기열 정보 조회 응답 - 놀이기구수={}", response.rides().size());
         return response;
     }
+
+    @Operation(
+            summary = "특정 놀이기구 대기열 정보 조회",
+            description = "특정 놀이기구의 프리미엄/일반 대기열의 대기 인원과 예상 대기 시간을 반환합니다."
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "조회 성공",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = com.skala.queue_server.dto.ride.RideQueueInfoDto.class)
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "잘못된 요청 (존재하지 않는 놀이기구)"
+            ),
+            @ApiResponse(
+                    responseCode = "500",
+                    description = "서버 내부 오류"
+            )
+    })
+    @GetMapping("/rides/{rideId}/info")
+    public com.skala.queue_server.dto.ride.RideQueueInfoDto getRideQueueInfo(@PathVariable("rideId") Long rideId) {
+        logger.info("놀이기구 대기열 정보 조회 요청 - 놀이기구={}", rideId);
+        com.skala.queue_server.dto.ride.RideQueueInfoDto response = queueService.getRideQueueInfo(rideId);
+        logger.info("놀이기구 대기열 정보 조회 응답 - 놀이기구={} 대기열타입수={}", rideId, response.waitTimes().size());
+        return response;
+    }
 }

@@ -164,6 +164,45 @@ public class QueueService {
         return new RideQueueInfoListResponse(rideInfos);
     }
 
+    /**
+     * 특정 놀이기구의 대기열 정보 조회
+     * 해당 놀이기구의 프리미엄/일반 대기열 인원과 예상 대기시간을 계산하여 반환
+     */
+    public RideQueueInfoDto getRideQueueInfo(Long rideId) {
+        logger.info("놀이기구 대기열 정보 조회 시작 - 놀이기구={}", rideId);
+
+        try {
+            // 메타 정보 로드
+            Meta meta = loadRideMeta(rideId);
+
+            // 프리미엄/일반 대기열 정보 조회
+            List<RideWaitTimeDto> waitTimes = new ArrayList<>();
+
+            // PREMIUM 대기열
+            String premiumKey = buildQueueKey(rideId, "PREMIUM");
+            Long premiumCount = redisTemplate.opsForZSet().size(premiumKey);
+            int premiumWaitingCount = premiumCount != null ? premiumCount.intValue() : 0;
+            int premiumWaitMinutes = (int) calculateEstimatedMinutes(premiumWaitingCount, meta);
+            waitTimes.add(new RideWaitTimeDto("PREMIUM", premiumWaitingCount, premiumWaitMinutes));
+
+            // GENERAL 대기열
+            String generalKey = buildQueueKey(rideId, "GENERAL");
+            Long generalCount = redisTemplate.opsForZSet().size(generalKey);
+            int generalWaitingCount = generalCount != null ? generalCount.intValue() : 0;
+            int generalWaitMinutes = (int) calculateEstimatedMinutes(generalWaitingCount, meta);
+            waitTimes.add(new RideWaitTimeDto("GENERAL", generalWaitingCount, generalWaitMinutes));
+
+            logger.info("놀이기구 대기열 정보 조회 완료 - 놀이기구={} 프리미엄대기={}명({}분) 일반대기={}명({}분)",
+                    rideId, premiumWaitingCount, premiumWaitMinutes, generalWaitingCount, generalWaitMinutes);
+
+            return new RideQueueInfoDto(rideId.intValue(), waitTimes);
+
+        } catch (Exception e) {
+            logger.error("놀이기구 대기열 정보 조회 실패 - 놀이기구={}", rideId, e);
+            throw new IllegalStateException("놀이기구 대기열 정보 조회 실패: " + e.getMessage());
+        }
+    }
+
     // ===== 책임별 내부 메서드 =====
 
     // 사용자 대기열 최대 개수 제한 검사
