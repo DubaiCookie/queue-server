@@ -110,12 +110,11 @@ public class QueueService {
 
     /**
      * 모든 놀이기구의 대기열 정보 조회
-     * 각 놀이기구의 프리미엄/일반 대기열 인원과 예상 대기시간을 계산하여 반환
+     * 각 놀이기구의 프리미엄/일반 대기열 인원과 예상 대기시간을 각각 반환
      */
     public RideQueueInfoListResponse getAllRidesQueueInfo() {
         logger.info("모든 놀이기구 대기열 정보 조회 시작");
 
-        // Redis에서 모든 놀이기구 메타 키 조회
         Set<String> metaKeys = redisTemplate.keys(META_KEY_PREFIX + "*");
         if (metaKeys == null || metaKeys.isEmpty()) {
             logger.info("놀이기구 메타 정보 없음");
@@ -126,14 +125,10 @@ public class QueueService {
 
         for (String metaKey : metaKeys) {
             try {
-                // 놀이기구 ID 추출
                 String rideIdStr = metaKey.replace(META_KEY_PREFIX, "");
                 int rideId = Integer.parseInt(rideIdStr);
-
-                // 메타 정보 로드
                 Meta meta = loadRideMeta((long) rideId);
 
-                // 프리미엄/일반 대기열 정보 조회
                 List<RideWaitTimeDto> waitTimes = new ArrayList<>();
 
                 // PREMIUM 대기열
@@ -151,10 +146,8 @@ public class QueueService {
                 waitTimes.add(new RideWaitTimeDto("GENERAL", generalWaitingCount, generalWaitMinutes));
 
                 rideInfos.add(new RideQueueInfoDto(rideId, waitTimes));
-
                 logger.info("놀이기구 대기열 정보 - 놀이기구={} 프리미엄대기={}명({}분) 일반대기={}명({}분)",
-                    rideId, premiumWaitingCount, premiumWaitMinutes, generalWaitingCount, generalWaitMinutes);
-
+                        rideId, premiumWaitingCount, premiumWaitMinutes, generalWaitingCount, generalWaitMinutes);
             } catch (Exception e) {
                 logger.error("놀이기구 대기열 정보 조회 실패 - 키={}", metaKey, e);
             }
@@ -166,16 +159,12 @@ public class QueueService {
 
     /**
      * 특정 놀이기구의 대기열 정보 조회
-     * 해당 놀이기구의 프리미엄/일반 대기열 인원과 예상 대기시간을 계산하여 반환
+     * 해당 놀이기구의 프리미엄/일반 대기열 인원과 예상 대기시간을 각각 반환
      */
     public RideQueueInfoDto getRideQueueInfo(Long rideId) {
         logger.info("놀이기구 대기열 정보 조회 시작 - 놀이기구={}", rideId);
-
         try {
-            // 메타 정보 로드
             Meta meta = loadRideMeta(rideId);
-
-            // 프리미엄/일반 대기열 정보 조회
             List<RideWaitTimeDto> waitTimes = new ArrayList<>();
 
             // PREMIUM 대기열
@@ -194,9 +183,7 @@ public class QueueService {
 
             logger.info("놀이기구 대기열 정보 조회 완료 - 놀이기구={} 프리미엄대기={}명({}분) 일반대기={}명({}분)",
                     rideId, premiumWaitingCount, premiumWaitMinutes, generalWaitingCount, generalWaitMinutes);
-
             return new RideQueueInfoDto(rideId.intValue(), waitTimes);
-
         } catch (Exception e) {
             logger.error("놀이기구 대기열 정보 조회 실패 - 놀이기구={}", rideId, e);
             throw new IllegalStateException("놀이기구 대기열 정보 조회 실패: " + e.getMessage());

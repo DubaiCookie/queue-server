@@ -129,7 +129,7 @@ public class QueueController {
     public com.skala.queue_server.dto.ride.RideQueueInfoDto getRideQueueInfo(@PathVariable("rideId") Long rideId) {
         logger.info("놀이기구 대기열 정보 조회 요청 - 놀이기구={}", rideId);
         com.skala.queue_server.dto.ride.RideQueueInfoDto response = queueService.getRideQueueInfo(rideId);
-        logger.info("놀이기구 대기열 정보 조회 응답 - 놀이기구={} 대기열타입수={}", rideId, response.waitTimes().size());
+        logger.info("놀이기구 대기열 정보 조회 응답 - 놀이기구={} 프리미엄/일반 대기열정보수={}", rideId, response.waitTimes().size());
         return response;
     }
 }
