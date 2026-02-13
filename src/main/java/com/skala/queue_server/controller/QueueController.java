@@ -132,4 +132,32 @@ public class QueueController {
         logger.info("놀이기구 대기열 정보 조회 응답 - 놀이기구={} 프리미엄/일반 대기열정보수={}", rideId, response.waitTimes().size());
         return response;
     }
+
+    @Operation(
+            summary = "예약 취소 (대기열 제거)",
+            description = "사용자가 예약을 취소할 때 대기열에서 제거합니다. 대기열과 사용자 인덱스 모두에서 제거됩니다."
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "취소 성공"
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "잘못된 요청"
+            ),
+            @ApiResponse(
+                    responseCode = "500",
+                    description = "서버 내부 오류"
+            )
+    })
+    @PostMapping("/cancel")
+    public void cancelReservation(@RequestBody @Valid EnqueueRequest request) {
+        logger.info("예약 취소 API 요청 - 사용자={} 놀이기구={} 티켓타입={}",
+                request.userId(), request.rideId(), request.ticketType());
+
+        queueService.cancelReservation(request.userId(), request.rideId(), request.ticketType());
+
+        logger.info("예약 취소 API 완료 - 사용자={} 놀이기구={}", request.userId(), request.rideId());
+    }
 }

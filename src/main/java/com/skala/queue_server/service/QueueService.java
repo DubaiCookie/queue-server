@@ -108,6 +108,38 @@ public class QueueService {
         return new QueueStatusListResponse(userId, items);
     }
 
+     /**
+     * 예약 취소 - 대기열에서 사용자 제거
+     *
+     * @param userId 사용자 ID
+     * @param rideId 놀이기구 ID
+     * @param ticketType 티켓 타입
+     */
+    public void cancelReservation(Long userId, Long rideId, String ticketType) {
+        logger.info("예약 취소 요청 - 사용자={} 놀이기구={} 티켓타입={}", userId, rideId, ticketType);
+
+        // 1) 티켓 타입 정규화
+        String normalizedType = normalizeTicketType(ticketType);
+
+        // 2) 대기열 키와 멤버 생성
+        String queueKey = buildQueueKey(rideId, normalizedType);
+        String member = buildUserMember(userId);
+
+        // 3) 대기열에서 사용자 제거
+        Long removedFromQueue = redisTemplate.opsForZSet().remove(queueKey, member);
+
+        // 4) 사용자 인덱스에서도 제거
+        removeFromUserIndex(userId, rideId, normalizedType);
+
+        if (removedFromQueue != null && removedFromQueue > 0) {
+            logger.info("대기열 제거 완료 - 사용자={} 놀이기구={} 티켓타입={} 제거된수={}",
+                    userId, rideId, normalizedType, removedFromQueue);
+        } else {
+            logger.warn("대기열에서 사용자를 찾을 수 없음 - 사용자={} 놀이기구={} 티켓타입={} (이미 제거되었거나 존재하지 않음)",
+                    userId, rideId, normalizedType);
+        }
+    }
+
     /**
      * 모든 놀이기구의 대기열 정보 조회
      * 각 놀이기구의 프리미엄/일반 대기열 인원과 예상 대기시간을 각각 반환
