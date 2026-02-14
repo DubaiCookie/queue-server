@@ -15,9 +15,9 @@ public class RideMetaInitializer {
     public void initializeRideMeta() {
         // 놀이기구 20개 고정 등록
         // 1,2,3만 임시 변경
-        save(1L, 10, 25, 5, 20);
-        save(2L, 15, 20, 4, 16);
-        save(3L, 20, 30, 6, 24);
+        save(1L, 600, 25, 5, 20);
+        save(2L, 180, 20, 4, 16);
+        save(3L, 900, 30, 6, 24);
         save(4L, 180, 22, 4, 18);
         save(5L, 240, 35, 7, 28);
         save(6L, 360, 15, 3, 12);
