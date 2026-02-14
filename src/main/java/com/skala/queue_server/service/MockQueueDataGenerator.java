@@ -94,38 +94,48 @@ public class MockQueueDataGenerator {
     /**
      * 특정 놀이기구의 초기 대기열 생성
      * 휴일 피크 시간대 기준 - 현실적인 대기 시간 유지
+     * ride 1번은 정확히 4사이클 고정 유지
      */
     private int createInitialQueue(int rideId) {
         // 놀이기구 메타 정보 기반 계산
         RideCapacity capacity = getRideCapacity(rideId);
         int popularity = getPopularity(rideId);
 
-        // 목표 대기 시간 (분) 설정 - 휴일 피크 타임 기준
-        int targetPremiumMinutes;
-        int targetGeneralMinutes;
+        int premiumCount;
+        int generalCount;
 
-        switch (popularity) {
-            case 3: // 높은 인기 - 30~60분 대기 (롤러코스터, 인기 어트랙션)
-                targetPremiumMinutes = 30 + random.nextInt(31); // 30~60분
-                targetGeneralMinutes = 40 + random.nextInt(41); // 40~80분
-                break;
-            case 1: // 낮은 인기 - 15~25분 대기 (조용한 놀이기구)
-                targetPremiumMinutes = 15 + random.nextInt(11); // 15~25분
-                targetGeneralMinutes = 20 + random.nextInt(16); // 20~35분
-                break;
-            default: // 보통 인기 - 20~40분 대기
-                targetPremiumMinutes = 20 + random.nextInt(21); // 20~40분
-                targetGeneralMinutes = 25 + random.nextInt(26); // 25~50분
+        // ride 1번은 항상 4사이클 고정
+        if (rideId == 1) {
+            premiumCount = 4 * capacity.capacityPremium; // 4 * 5 = 20명
+            generalCount = 4 * capacity.capacityGeneral; // 4 * 20 = 80명
+        } else {
+            // 목표 대기 시간 (분) 설정 - 휴일 피크 타임 기준
+            int targetPremiumMinutes;
+            int targetGeneralMinutes;
+
+            switch (popularity) {
+                case 3: // 높은 인기 - 30~60분 대기 (롤러코스터, 인기 어트랙션)
+                    targetPremiumMinutes = 30 + random.nextInt(31); // 30~60분
+                    targetGeneralMinutes = 40 + random.nextInt(41); // 40~80분
+                    break;
+                case 1: // 낮은 인기 - 15~25분 대기 (조용한 놀이기구)
+                    targetPremiumMinutes = 15 + random.nextInt(11); // 15~25분
+                    targetGeneralMinutes = 20 + random.nextInt(16); // 20~35분
+                    break;
+                default: // 보통 인기 - 20~40분 대기
+                    targetPremiumMinutes = 20 + random.nextInt(21); // 20~40분
+                    targetGeneralMinutes = 25 + random.nextInt(26); // 25~50분
+            }
+
+            // 필요한 인원 계산
+            // 사이클 수 = (목표 시간 * 60) / 탑승 시간
+            // 필요 인원 = 사이클 수 * 수용 인원
+            int premiumCycles = (targetPremiumMinutes * 60) / capacity.ridingTimeSeconds;
+            int generalCycles = (targetGeneralMinutes * 60) / capacity.ridingTimeSeconds;
+
+            premiumCount = Math.max(premiumCycles * capacity.capacityPremium, 20);
+            generalCount = Math.max(generalCycles * capacity.capacityGeneral, 40);
         }
-
-        // 필요한 인원 계산
-        // 사이클 수 = (목표 시간 * 60) / 탑승 시간
-        // 필요 인원 = 사이클 수 * 수용 인원
-        int premiumCycles = (targetPremiumMinutes * 60) / capacity.ridingTimeSeconds;
-        int generalCycles = (targetGeneralMinutes * 60) / capacity.ridingTimeSeconds;
-
-        int premiumCount = Math.max(premiumCycles * capacity.capacityPremium, 20);
-        int generalCount = Math.max(generalCycles * capacity.capacityGeneral, 40);
 
         addUsersToQueue(rideId, "PREMIUM", premiumCount);
         addUsersToQueue(rideId, "GENERAL", generalCount);
@@ -134,15 +144,21 @@ public class MockQueueDataGenerator {
         int actualPremiumMinutes = (premiumCount * capacity.ridingTimeSeconds) / (capacity.capacityPremium * 60);
         int actualGeneralMinutes = (generalCount * capacity.ridingTimeSeconds) / (capacity.capacityGeneral * 60);
 
-        logger.info("놀이기구 {} 초기화 - 프리미엄:{}명({}분) 일반:{}명({}분) [인기도:{}]",
-                rideId, premiumCount, actualPremiumMinutes, generalCount, actualGeneralMinutes,
-                popularity == 3 ? "높음" : (popularity == 1 ? "낮음" : "보통"));
+        if (rideId == 1) {
+            logger.info("놀이기구 {} 초기화 [4사이클 고정] - 프리미엄:{}명({}분) 일반:{}명({}분)",
+                    rideId, premiumCount, actualPremiumMinutes, generalCount, actualGeneralMinutes);
+        } else {
+            logger.info("놀이기구 {} 초기화 - 프리미엄:{}명({}분) 일반:{}명({}분) [인기도:{}]",
+                    rideId, premiumCount, actualPremiumMinutes, generalCount, actualGeneralMinutes,
+                    popularity == 3 ? "높음" : (popularity == 1 ? "낮음" : "보통"));
+        }
 
         return premiumCount + generalCount;
     }
 
     /**
      * 대기열이 부족하면 보충 - 휴일 피크 타임 기준 유지
+     * ride 1번은 정확히 4사이클 고정 유지
      * 대기열이 일정 수준 이하로 떨어지면 적극적으로 보충
      */
     private int refillQueueIfNeeded(int rideId) {
@@ -150,27 +166,36 @@ public class MockQueueDataGenerator {
         int popularity = getPopularity(rideId);
         int added = 0;
 
-        // 목표 최소 대기 시간 (분)
-        int minPremiumMinutes;
-        int minGeneralMinutes;
+        int premiumMin;
+        int generalMin;
 
-        switch (popularity) {
-            case 3: // 높은 인기 - 최소 25분 유지
-                minPremiumMinutes = 25;
-                minGeneralMinutes = 35;
-                break;
-            case 1: // 낮은 인기 - 최소 15분 유지
-                minPremiumMinutes = 15;
-                minGeneralMinutes = 20;
-                break;
-            default: // 보통 인기 - 최소 20분 유지
-                minPremiumMinutes = 20;
-                minGeneralMinutes = 25;
+        // ride 1번은 항상 4사이클 유지
+        if (rideId == 1) {
+            premiumMin = 4 * capacity.capacityPremium; // 4 * 5 = 20명
+            generalMin = 4 * capacity.capacityGeneral; // 4 * 20 = 80명
+        } else {
+            // 목표 최소 대기 시간 (분)
+            int minPremiumMinutes;
+            int minGeneralMinutes;
+
+            switch (popularity) {
+                case 3: // 높은 인기 - 최소 25분 유지
+                    minPremiumMinutes = 25;
+                    minGeneralMinutes = 35;
+                    break;
+                case 1: // 낮은 인기 - 최소 15분 유지
+                    minPremiumMinutes = 15;
+                    minGeneralMinutes = 20;
+                    break;
+                default: // 보통 인기 - 최소 20분 유지
+                    minPremiumMinutes = 20;
+                    minGeneralMinutes = 25;
+            }
+
+            // 최소 인원 계산
+            premiumMin = Math.max((minPremiumMinutes * 60 * capacity.capacityPremium) / capacity.ridingTimeSeconds, 15);
+            generalMin = Math.max((minGeneralMinutes * 60 * capacity.capacityGeneral) / capacity.ridingTimeSeconds, 30);
         }
-
-        // 최소 인원 계산
-        int premiumMin = Math.max((minPremiumMinutes * 60 * capacity.capacityPremium) / capacity.ridingTimeSeconds, 15);
-        int generalMin = Math.max((minGeneralMinutes * 60 * capacity.capacityGeneral) / capacity.ridingTimeSeconds, 30);
 
         // PREMIUM 줄 확인 및 보충
         String premiumKey = QUEUE_KEY_PREFIX + rideId + ":PREMIUM";
@@ -178,14 +203,23 @@ public class MockQueueDataGenerator {
         int currentPremium = (premiumSize != null) ? premiumSize.intValue() : 0;
 
         if (currentPremium < premiumMin) {
-            // 부족한 만큼 + 추가 여유분 (휴일엔 계속 사람이 몰림)
-            int shortage = premiumMin - currentPremium;
-            int extraBuffer = 10 + random.nextInt(16); // 10~25명 추가 버퍼
-            int toAdd = shortage + extraBuffer;
-            addUsersToQueue(rideId, "PREMIUM", toAdd);
-            added += toAdd;
-            logger.info("놀이기구 {} 프리미엄 보충 - 현재:{}명 → {}명 추가 (최소:{}명 유지)",
-                    rideId, currentPremium, toAdd, premiumMin);
+            if (rideId == 1) {
+                // ride 1번은 정확히 4사이클로 맞춤
+                int toAdd = premiumMin - currentPremium;
+                addUsersToQueue(rideId, "PREMIUM", toAdd);
+                added += toAdd;
+                logger.info("놀이기구 1 프리미엄 보충 [4사이클 유지] - 현재:{}명 → {}명 추가 (목표:20명 고정)",
+                        currentPremium, toAdd);
+            } else {
+                // 부족한 만큼 + 추가 여유분 (휴일엔 계속 사람이 몰림)
+                int shortage = premiumMin - currentPremium;
+                int extraBuffer = 10 + random.nextInt(16); // 10~25명 추가 버퍼
+                int toAdd = shortage + extraBuffer;
+                addUsersToQueue(rideId, "PREMIUM", toAdd);
+                added += toAdd;
+                logger.info("놀이기구 {} 프리미엄 보충 - 현재:{}명 → {}명 추가 (최소:{}명 유지)",
+                        rideId, currentPremium, toAdd, premiumMin);
+            }
         }
 
         // GENERAL 줄 확인 및 보충
@@ -194,14 +228,23 @@ public class MockQueueDataGenerator {
         int currentGeneral = (generalSize != null) ? generalSize.intValue() : 0;
 
         if (currentGeneral < generalMin) {
-            // 부족한 만큼 + 추가 여유분
-            int shortage = generalMin - currentGeneral;
-            int extraBuffer = 15 + random.nextInt(26); // 15~40명 추가 버퍼
-            int toAdd = shortage + extraBuffer;
-            addUsersToQueue(rideId, "GENERAL", toAdd);
-            added += toAdd;
-            logger.info("놀이기구 {} 일반 보충 - 현재:{}명 → {}명 추가 (최소:{}명 유지)",
-                    rideId, currentGeneral, toAdd, generalMin);
+            if (rideId == 1) {
+                // ride 1번은 정확히 4사이클로 맞춤
+                int toAdd = generalMin - currentGeneral;
+                addUsersToQueue(rideId, "GENERAL", toAdd);
+                added += toAdd;
+                logger.info("놀이기구 1 일반 보충 [4사이클 유지] - 현재:{}명 → {}명 추가 (목표:80명 고정)",
+                        currentGeneral, toAdd);
+            } else {
+                // 부족한 만큼 + 추가 여유분
+                int shortage = generalMin - currentGeneral;
+                int extraBuffer = 15 + random.nextInt(26); // 15~40명 추가 버퍼
+                int toAdd = shortage + extraBuffer;
+                addUsersToQueue(rideId, "GENERAL", toAdd);
+                added += toAdd;
+                logger.info("놀이기구 {} 일반 보충 - 현재:{}명 → {}명 추가 (최소:{}명 유지)",
+                        rideId, currentGeneral, toAdd, generalMin);
+            }
         }
 
         return added;
