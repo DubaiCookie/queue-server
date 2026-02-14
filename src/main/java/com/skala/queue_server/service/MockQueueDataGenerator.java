@@ -82,61 +82,96 @@ public class MockQueueDataGenerator {
 
     /**
      * 특정 놀이기구의 초기 대기열 생성
+     * 최소 10분 이상 대기 시간이 유지되도록 계산
      */
     private int createInitialQueue(int rideId) {
+        // 놀이기구 메타 정보 기반 계산
+        RideCapacity capacity = getRideCapacity(rideId);
         int popularity = getPopularity(rideId);
 
-        // 인기도에 따른 초기 인원 설정
+        // 최소 10분 대기 시간 보장 계산
+        // 10분 = 600초
+        // 사이클 수 = 600 / 탑승시간
+        // 필요 인원 = 사이클 수 * 수용 인원
+        int cyclesPerTenMinutes = 600 / capacity.ridingTimeSeconds;
+
+        // 프리미엄과 일반의 기본 최소 인원
+        int basePremiumCount = cyclesPerTenMinutes * capacity.capacityPremium;
+        int baseGeneralCount = cyclesPerTenMinutes * capacity.capacityGeneral;
+
+        // 인기도에 따른 추가 배율 (10분 + α)
+        double multiplier;
         int premiumCount;
         int generalCount;
 
         switch (popularity) {
-            case 3: // 높은 인기
-                premiumCount = 30 + random.nextInt(21); // 30~50명
-                generalCount = 150 + random.nextInt(101); // 150~250명
+            case 3: // 높은 인기 - 15~25분 대기
+                multiplier = 1.5 + (random.nextDouble() * 1.0); // 1.5 ~ 2.5배
+                premiumCount = (int) (basePremiumCount * multiplier);
+                generalCount = (int) (baseGeneralCount * multiplier);
                 break;
-            case 1: // 낮은 인기
-                premiumCount = 10 + random.nextInt(11); // 10~20명
-                generalCount = 20 + random.nextInt(31); // 20~50명
+            case 1: // 낮은 인기 - 10~15분 대기
+                multiplier = 1.0 + (random.nextDouble() * 0.5); // 1.0 ~ 1.5배
+                premiumCount = (int) (basePremiumCount * multiplier);
+                generalCount = (int) (baseGeneralCount * multiplier);
                 break;
-            default: // 보통 인기
-                premiumCount = 15 + random.nextInt(16); // 15~30명
-                generalCount = 50 + random.nextInt(51); // 50~100명
+            default: // 보통 인기 - 12~20분 대기
+                multiplier = 1.2 + (random.nextDouble() * 0.8); // 1.2 ~ 2.0배
+                premiumCount = (int) (basePremiumCount * multiplier);
+                generalCount = (int) (baseGeneralCount * multiplier);
         }
+
+        // 최소 인원 보장 (너무 적으면 최소값 설정)
+        premiumCount = Math.max(premiumCount, 15);
+        generalCount = Math.max(generalCount, 30);
 
         addUsersToQueue(rideId, "PREMIUM", premiumCount);
         addUsersToQueue(rideId, "GENERAL", generalCount);
 
-        logger.info("놀이기구 {} 초기화 - 프리미엄:{}명 일반:{}명 (인기도:{})",
-                rideId, premiumCount, generalCount, popularity);
+        // 예상 대기 시간 계산 (로그용)
+        int estimatedPremiumMinutes = (premiumCount / capacity.capacityPremium) * (capacity.ridingTimeSeconds / 60);
+        int estimatedGeneralMinutes = (generalCount / capacity.capacityGeneral) * (capacity.ridingTimeSeconds / 60);
+
+        logger.info("놀이기구 {} 초기화 - 프리미엄:{}명(약{}분) 일반:{}명(약{}분) (인기도:{})",
+                rideId, premiumCount, estimatedPremiumMinutes, generalCount, estimatedGeneralMinutes, popularity);
 
         return premiumCount + generalCount;
     }
 
     /**
-     * 대기열이 부족하면 보충
+     * 대기열이 부족하면 보충 (최소 10분 대기 시간 유지)
      */
     private int refillQueueIfNeeded(int rideId) {
+        RideCapacity capacity = getRideCapacity(rideId);
         int popularity = getPopularity(rideId);
         int added = 0;
+
+        // 10분 대기를 위한 최소 인원 계산
+        int cyclesPerTenMinutes = 600 / capacity.ridingTimeSeconds;
+        int basePremiumMin = cyclesPerTenMinutes * capacity.capacityPremium;
+        int baseGeneralMin = cyclesPerTenMinutes * capacity.capacityGeneral;
 
         // 목표 최소 인원 (이 이하로 떨어지면 보충)
         int premiumMin;
         int generalMin;
 
         switch (popularity) {
-            case 3: // 높은 인기
-                premiumMin = 20;
-                generalMin = 100;
+            case 3: // 높은 인기 - 최소 12분 유지
+                premiumMin = (int) (basePremiumMin * 1.2);
+                generalMin = (int) (baseGeneralMin * 1.2);
                 break;
-            case 1: // 낮은 인기
-                premiumMin = 5;
-                generalMin = 15;
+            case 1: // 낮은 인기 - 최소 10분 유지
+                premiumMin = basePremiumMin;
+                generalMin = baseGeneralMin;
                 break;
-            default: // 보통 인기
-                premiumMin = 10;
-                generalMin = 30;
+            default: // 보통 인기 - 최소 11분 유지
+                premiumMin = (int) (basePremiumMin * 1.1);
+                generalMin = (int) (baseGeneralMin * 1.1);
         }
+
+        // 최소값 보장
+        premiumMin = Math.max(premiumMin, 10);
+        generalMin = Math.max(generalMin, 20);
 
         // PREMIUM 줄 확인 및 보충
         String premiumKey = QUEUE_KEY_PREFIX + rideId + ":PREMIUM";
@@ -144,10 +179,13 @@ public class MockQueueDataGenerator {
         int currentPremium = (premiumSize != null) ? premiumSize.intValue() : 0;
 
         if (currentPremium < premiumMin) {
-            int toAdd = 5 + random.nextInt(6); // 5~10명 추가
+            // 부족한 만큼 + 약간의 여유분 추가
+            int shortage = premiumMin - currentPremium;
+            int toAdd = shortage + (3 + random.nextInt(5)); // 부족분 + 3~7명
             addUsersToQueue(rideId, "PREMIUM", toAdd);
             added += toAdd;
-            logger.debug("놀이기구 {} 프리미엄 보충 - 현재:{}명 추가:{}명", rideId, currentPremium, toAdd);
+            logger.debug("놀이기구 {} 프리미엄 보충 - 현재:{}명 최소:{}명 추가:{}명",
+                    rideId, currentPremium, premiumMin, toAdd);
         }
 
         // GENERAL 줄 확인 및 보충
@@ -156,10 +194,13 @@ public class MockQueueDataGenerator {
         int currentGeneral = (generalSize != null) ? generalSize.intValue() : 0;
 
         if (currentGeneral < generalMin) {
-            int toAdd = 10 + random.nextInt(16); // 10~25명 추가
+            // 부족한 만큼 + 약간의 여유분 추가
+            int shortage = generalMin - currentGeneral;
+            int toAdd = shortage + (5 + random.nextInt(10)); // 부족분 + 5~14명
             addUsersToQueue(rideId, "GENERAL", toAdd);
             added += toAdd;
-            logger.debug("놀이기구 {} 일반 보충 - 현재:{}명 추가:{}명", rideId, currentGeneral, toAdd);
+            logger.debug("놀이기구 {} 일반 보충 - 현재:{}명 최소:{}명 추가:{}명",
+                    rideId, currentGeneral, generalMin, toAdd);
         }
 
         return added;
@@ -196,5 +237,44 @@ public class MockQueueDataGenerator {
         // 보통 인기: 나머지
         return 2;
     }
+
+    /**
+     * 놀이기구별 메타 정보 조회
+     * (RideMetaInitializer와 동일한 데이터)
+     */
+    private RideCapacity getRideCapacity(int rideId) {
+        return switch (rideId) {
+            case 1 -> new RideCapacity(10, 5, 20);
+            case 2 -> new RideCapacity(15, 4, 16);
+            case 3 -> new RideCapacity(20, 6, 24);
+            case 4 -> new RideCapacity(180, 4, 18);
+            case 5 -> new RideCapacity(240, 7, 28);
+            case 6 -> new RideCapacity(360, 3, 12);
+            case 7 -> new RideCapacity(120, 5, 20);
+            case 8 -> new RideCapacity(180, 5, 22);
+            case 9 -> new RideCapacity(180, 8, 30);
+            case 10 -> new RideCapacity(300, 4, 16);
+            case 11 -> new RideCapacity(180, 5, 20);
+            case 12 -> new RideCapacity(240, 5, 25);
+            case 13 -> new RideCapacity(120, 3, 14);
+            case 14 -> new RideCapacity(180, 4, 18);
+            case 15 -> new RideCapacity(1200, 6, 26);
+            case 16 -> new RideCapacity(180, 6, 24);
+            case 17 -> new RideCapacity(300, 4, 16);
+            case 18 -> new RideCapacity(180, 5, 20);
+            case 19 -> new RideCapacity(300, 4, 18);
+            case 20 -> new RideCapacity(1200, 8, 30);
+            default -> new RideCapacity(180, 5, 20); // 기본값
+        };
+    }
+
+    /**
+     * 놀이기구 수용 정보
+     */
+    private record RideCapacity(
+            int ridingTimeSeconds,
+            int capacityPremium,
+            int capacityGeneral
+    ) {}
 }
 
