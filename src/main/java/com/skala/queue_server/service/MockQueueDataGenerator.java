@@ -101,21 +101,22 @@ public class MockQueueDataGenerator {
         int popularity = getPopularity(rideId);
 
         // 목표 대기 시간 (분) 설정 - 휴일 피크 타임 기준
+        // 프리미엄은 일반 줄의 40~60% 수준으로 빠르게 설정
         int targetPremiumMinutes;
         int targetGeneralMinutes;
 
         switch (popularity) {
-            case 3: // 높은 인기 - 30~60분 대기 (롤러코스터, 인기 어트랙션)
-                targetPremiumMinutes = 30 + random.nextInt(31); // 30~60분
-                targetGeneralMinutes = 40 + random.nextInt(41); // 40~80분
+            case 3: // 높은 인기 - 프리미엄 우대 확실
+                targetGeneralMinutes = 50 + random.nextInt(31); // 일반: 50~80분
+                targetPremiumMinutes = (int) (targetGeneralMinutes * (0.4 + random.nextDouble() * 0.2)); // 프리미엄: 일반의 40~60%
                 break;
-            case 1: // 낮은 인기 - 15~25분 대기 (조용한 놀이기구)
-                targetPremiumMinutes = 15 + random.nextInt(11); // 15~25분
-                targetGeneralMinutes = 20 + random.nextInt(16); // 20~35분
+            case 1: // 낮은 인기 - 대기 적지만 프리미엄 여전히 빠름
+                targetGeneralMinutes = 20 + random.nextInt(16); // 일반: 20~35분
+                targetPremiumMinutes = (int) (targetGeneralMinutes * (0.4 + random.nextDouble() * 0.2)); // 프리미엄: 일반의 40~60%
                 break;
-            default: // 보통 인기 - 20~40분 대기
-                targetPremiumMinutes = 20 + random.nextInt(21); // 20~40분
-                targetGeneralMinutes = 25 + random.nextInt(26); // 25~50분
+            default: // 보통 인기 - 프리미엄 확실한 이점
+                targetGeneralMinutes = 30 + random.nextInt(26); // 일반: 30~55분
+                targetPremiumMinutes = (int) (targetGeneralMinutes * (0.4 + random.nextDouble() * 0.2)); // 프리미엄: 일반의 40~60%
         }
 
         // 필요한 인원 계산
@@ -150,22 +151,22 @@ public class MockQueueDataGenerator {
         int popularity = getPopularity(rideId);
         int added = 0;
 
-        // 목표 최소 대기 시간 (분)
-        int minPremiumMinutes;
+        // 목표 최소 대기 시간 (분) - 프리미엄은 일반의 50% 수준 유지
         int minGeneralMinutes;
+        int minPremiumMinutes;
 
         switch (popularity) {
-            case 3: // 높은 인기 - 최소 25분 유지
-                minPremiumMinutes = 25;
-                minGeneralMinutes = 35;
+            case 3: // 높은 인기 - 최소 대기도 프리미엄이 확실히 빠름
+                minGeneralMinutes = 40;
+                minPremiumMinutes = 20; // 일반의 50%
                 break;
-            case 1: // 낮은 인기 - 최소 15분 유지
-                minPremiumMinutes = 15;
-                minGeneralMinutes = 20;
+            case 1: // 낮은 인기 - 프리미엄 여전히 우대
+                minGeneralMinutes = 18;
+                minPremiumMinutes = 9; // 일반의 50%
                 break;
-            default: // 보통 인기 - 최소 20분 유지
-                minPremiumMinutes = 20;
-                minGeneralMinutes = 25;
+            default: // 보통 인기 - 프리미엄 이점 명확
+                minGeneralMinutes = 28;
+                minPremiumMinutes = 14; // 일반의 50%
         }
 
         // 최소 인원 계산
