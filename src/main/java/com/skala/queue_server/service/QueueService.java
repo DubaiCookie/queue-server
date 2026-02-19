@@ -50,10 +50,11 @@ public class QueueService {
 
         // 5) 메타 로드 + 예상 대기시간 계산
         Meta meta = loadRideMeta(rideId);
-        long estimatedMinutes = calculateEstimatedMinutes(aheadCount, meta);
+        long estimatedMinutes = calculateEstimatedMinutes(aheadCount, meta, normalizedType);
 
-        logger.info("예상 대기시간 계산(등록) - 놀이기구={} 현재순번={} 앞사람수={} ridingTime={}초 capacityTotal={} 예상대기(분)={}",
-                rideId, position, aheadCount, meta.ridingTimeSeconds, meta.capacityTotal, estimatedMinutes);
+        long capacity = "PREMIUM".equals(normalizedType) ? meta.capacityPremium : meta.capacityGeneral;
+        logger.info("예상 대기시간 계산(등록) - 놀이기구={} 티켓타입={} 현재순번={} 앞사람수={} ridingTime={}초 capacity={} 예상대기(분)={}",
+                rideId, normalizedType, position, aheadCount, meta.ridingTimeSeconds, capacity, estimatedMinutes);
 
         return new EnqueueResponse(position, estimatedMinutes);
     }
@@ -72,10 +73,11 @@ public class QueueService {
 
         // 4) 메타 로드 + 예상 대기시간 계산
         Meta meta = loadRideMeta(rideId);
-        long estimatedMinutes = calculateEstimatedMinutes(aheadCount, meta);
+        long estimatedMinutes = calculateEstimatedMinutes(aheadCount, meta, normalizedType);
 
-        logger.info("예상 대기시간 계산(재조회) - 놀이기구={} 현재순번={} 앞사람수={} ridingTime={}초 capacityTotal={} 예상대기(분)={} 키={}",
-                rideId, position, aheadCount, meta.ridingTimeSeconds, meta.capacityTotal, estimatedMinutes, queueKey);
+        long capacity = "PREMIUM".equals(normalizedType) ? meta.capacityPremium : meta.capacityGeneral;
+        logger.info("예상 대기시간 계산(재조회) - 놀이기구={} 티켓타입={} 현재순번={} 앞사람수={} ridingTime={}초 capacity={} 예상대기(분)={} 키={}",
+                rideId, normalizedType, position, aheadCount, meta.ridingTimeSeconds, capacity, estimatedMinutes, queueKey);
 
         return new EnqueueResponse(position, estimatedMinutes);
     }
@@ -167,14 +169,14 @@ public class QueueService {
                 String premiumKey = buildQueueKey((long) rideId, "PREMIUM");
                 Long premiumCount = redisTemplate.opsForZSet().size(premiumKey);
                 int premiumWaitingCount = premiumCount != null ? premiumCount.intValue() : 0;
-                int premiumWaitMinutes = (int) calculateEstimatedMinutes(premiumWaitingCount, meta);
+                int premiumWaitMinutes = (int) calculateEstimatedMinutes(premiumWaitingCount, meta, "PREMIUM");
                 waitTimes.add(new RideWaitTimeDto("PREMIUM", premiumWaitingCount, premiumWaitMinutes));
 
                 // GENERAL 대기열
                 String generalKey = buildQueueKey((long) rideId, "GENERAL");
                 Long generalCount = redisTemplate.opsForZSet().size(generalKey);
                 int generalWaitingCount = generalCount != null ? generalCount.intValue() : 0;
-                int generalWaitMinutes = (int) calculateEstimatedMinutes(generalWaitingCount, meta);
+                int generalWaitMinutes = (int) calculateEstimatedMinutes(generalWaitingCount, meta, "GENERAL");
                 waitTimes.add(new RideWaitTimeDto("GENERAL", generalWaitingCount, generalWaitMinutes));
 
                 rideInfos.add(new RideQueueInfoDto(rideId, waitTimes));
@@ -203,14 +205,14 @@ public class QueueService {
             String premiumKey = buildQueueKey(rideId, "PREMIUM");
             Long premiumCount = redisTemplate.opsForZSet().size(premiumKey);
             int premiumWaitingCount = premiumCount != null ? premiumCount.intValue() : 0;
-            int premiumWaitMinutes = (int) calculateEstimatedMinutes(premiumWaitingCount, meta);
+            int premiumWaitMinutes = (int) calculateEstimatedMinutes(premiumWaitingCount, meta, "PREMIUM");
             waitTimes.add(new RideWaitTimeDto("PREMIUM", premiumWaitingCount, premiumWaitMinutes));
 
             // GENERAL 대기열
             String generalKey = buildQueueKey(rideId, "GENERAL");
             Long generalCount = redisTemplate.opsForZSet().size(generalKey);
             int generalWaitingCount = generalCount != null ? generalCount.intValue() : 0;
-            int generalWaitMinutes = (int) calculateEstimatedMinutes(generalWaitingCount, meta);
+            int generalWaitMinutes = (int) calculateEstimatedMinutes(generalWaitingCount, meta, "GENERAL");
             waitTimes.add(new RideWaitTimeDto("GENERAL", generalWaitingCount, generalWaitMinutes));
 
             logger.info("놀이기구 대기열 정보 조회 완료 - 놀이기구={} 프리미엄대기={}명({}분) 일반대기={}명({}분)",
@@ -257,18 +259,35 @@ public class QueueService {
         String metaKey = META_KEY_PREFIX + rideId;
         Object ridingTimeObj = redisTemplate.opsForHash().get(metaKey, "ridingTimeSeconds");
         Object totalCapacityObj = redisTemplate.opsForHash().get(metaKey, "capacityTotal");
-        if (ridingTimeObj == null || totalCapacityObj == null) {
-            throw new IllegalStateException("놀이기구 메타 정보 없음");
+        Object premiumCapacityObj = redisTemplate.opsForHash().get(metaKey, "capacityPremium");
+        Object generalCapacityObj = redisTemplate.opsForHash().get(metaKey, "capacityGeneral");
+
+        if (ridingTimeObj == null || totalCapacityObj == null || premiumCapacityObj == null || generalCapacityObj == null) {
+            throw new IllegalStateException("놀이기구 메타 정보 없음 - rideId=" + rideId);
         }
-        return new Meta(Long.parseLong(ridingTimeObj.toString()), Long.parseLong(totalCapacityObj.toString()));
+
+        return new Meta(
+            Long.parseLong(ridingTimeObj.toString()),
+            Long.parseLong(totalCapacityObj.toString()),
+            Long.parseLong(premiumCapacityObj.toString()),
+            Long.parseLong(generalCapacityObj.toString())
+        );
     }
 
-    // 예상 대기시간(분) 계산
-    private long calculateEstimatedMinutes(long aheadCount, Meta meta) {
-        long cycleIndex = aheadCount / meta.capacityTotal;
-        long estimatedSeconds = cycleIndex * meta.ridingTimeSeconds;
-        if (estimatedSeconds <= 0) return 0;
-        if (estimatedSeconds < 60) return 1;
+    // 예상 대기시간(분) 계산 - 티켓 타입별 수용 인원으로 계산
+    private long calculateEstimatedMinutes(long aheadCount, Meta meta, String ticketType) {
+        if (aheadCount <= 0) return 0;
+
+        // 티켓 타입에 따라 해당 줄의 수용 인원 선택
+        long capacity = "PREMIUM".equals(ticketType) ? meta.capacityPremium : meta.capacityGeneral;
+
+        // 필요한 사이클 수 = ⌈대기 인원 ÷ 해당 줄 수용 인원⌉
+        long requiredCycles = (long) Math.ceil((double) aheadCount / capacity);
+
+        // 예상 대기시간(초) = 사이클 수 × 운행 시간
+        long estimatedSeconds = requiredCycles * meta.ridingTimeSeconds;
+
+        // 초 → 분 변환 (올림)
         return (long) Math.ceil(estimatedSeconds / 60.0);
     }
 
@@ -300,5 +319,5 @@ public class QueueService {
     }
 
     // 메타 정보를 담는 간단한 내부 클래스
-    private record Meta(long ridingTimeSeconds, long capacityTotal) {}
+    private record Meta(long ridingTimeSeconds, long capacityTotal, long capacityPremium, long capacityGeneral) {}
 }
