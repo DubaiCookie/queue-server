@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: queue-server
-          image: amdp-registry.skala-ai.com/skala26a-cloud/team3-queue-server:ea44d03
+          image: amdp-registry.skala-ai.com/skala26a-cloud/team3-queue-server:f127441
           ports:
             - containerPort: 8079
           envFrom:
