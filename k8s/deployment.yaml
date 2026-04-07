@@ -18,3 +18,6 @@ spec:
           image: amdp-registry.skala-ai.com/skala26a-cloud/team3-queue-server:latest
           ports:
             - containerPort: 8079
+          envFrom:
+            - configMapRef:
+                name: queue-server-config
