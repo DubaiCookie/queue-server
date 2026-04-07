@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: queue-server
+  namespace: default
+spec:
+  selector:
+    app: queue-server    # 이 라벨을 가진 Pod에게 트래픽 전달
+  ports:
+    - protocol: TCP
+      port: 8079         # Service가 받는 포트 (다른 서비스가 호출할 때 쓰는 포트)
+      targetPort: 8079   # 실제 Pod 컨테이너 포트
+  type: ClusterIP        # 클러스터 내부에서만 접근 가능
