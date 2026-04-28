@@ -1,163 +1,78 @@
 package com.skala.queue_server.controller;
 
-import com.skala.queue_server.dto.enqueue.EnqueueRequest;
-import com.skala.queue_server.dto.enqueue.EnqueueResponse;
-import com.skala.queue_server.dto.ride.RideQueueInfoListResponse;
-import com.skala.queue_server.dto.status.QueueStatusListResponse;
+import com.skala.queue_server.dto.*;
+import com.skala.queue_server.service.AttractionSchedulerService;
 import com.skala.queue_server.service.QueueService;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.media.Content;
-import io.swagger.v3.oas.annotations.media.Schema;
-import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/queue")
+@RequestMapping("/queue/attractions")
 @RequiredArgsConstructor
-@Tag(
-        name = "Queue API",
-        description = "대기열 서버 API (메인 서버 전용)"
-)
+@Tag(name = "Queue API", description = "놀이기구 대기열 관리")
 public class QueueController {
 
-    private static final Logger logger = LoggerFactory.getLogger(QueueController.class);
     private final QueueService queueService;
+    private final AttractionSchedulerService schedulerService;
 
-    @Operation(
-            summary = "대기열 등록",
-            description = "메인 서버에서 호출하는 대기열 등록 API입니다. 사용자/놀이기구/티켓타입 정보를 기반으로 Redis 대기열에 등록하고 현재 순번과 예상 대기 시간을 반환합니다."
-    )
-    @ApiResponses({
-            @ApiResponse(
-                    responseCode = "200",
-                    description = "대기열 등록 성공",
-                    content = @Content(
-                            mediaType = "application/json",
-                            schema = @Schema(implementation = EnqueueResponse.class)
-                    )
-            ),
-            @ApiResponse(
-                    responseCode = "400",
-                    description = "잘못된 요청 (유효성 검사 실패)"
-            ),
-            @ApiResponse(
-                    responseCode = "500",
-                    description = "서버 내부 오류"
-            )
-    })
+    @Operation(summary = "대기열 등록")
     @PostMapping("/enqueue")
-    public EnqueueResponse enqueue(@RequestBody @Valid EnqueueRequest request) {
-        logger.info("대기열 등록 요청 - 사용자={} 놀이기구={} 티켓타입={}", request.userId(), request.rideId(), request.ticketType());
-
+    public ResponseEntity<EnqueueResponse> enqueue(@Valid @RequestBody EnqueueRequest request) {
+        // TODO: JWT에서 requesterId 추출 (현재는 요청 userId 그대로 사용)
         EnqueueResponse response = queueService.enqueue(
-                request.userId(),
-                request.rideId(),
-                request.ticketType()
+                request.getUserId(),
+                request.getAttractionId(),
+                request.getIssuedTicketId(),
+                request.getTicketType()
         );
-
-        logger.info("대기열 등록 응답 - 현재순번={} 예상대기시간={}분", response.position(), response.estimatedWaitMinutes());
-        return response;
+        return ResponseEntity.ok(response);
     }
 
-    @Operation(
-            summary = "사용자 모든 대기열 상태 조회",
-            description = "사용자가 대기 중인 모든 놀이기구의 현재 순번과 예상 대기 시간을 리스트로 반환합니다. 최대 3개까지만 유지됩니다."
-    )
-    @GetMapping("/status/all")
-    public QueueStatusListResponse getAllStatus(@RequestParam("userId") Long userId) {
-        logger.info("사용자 전체 대기열 상태 조회 요청 - 사용자={}", userId);
-        QueueStatusListResponse response = queueService.getAllStatus(userId);
-        logger.info("사용자 전체 대기열 상태 조회 응답 - 항목수={}", response.items().size());
-        return response;
+    @Operation(summary = "대기열 상태 조회")
+    @GetMapping("/status/{userId}")
+    public ResponseEntity<QueueStatusResponse> getStatus(
+            @PathVariable Long userId,
+            @RequestAttribute(name = "authenticatedUserId", required = false) Long requesterId) {
+        // TODO: JWT 필터 연동 후 requesterId 활용
+        Long rid = requesterId != null ? requesterId : userId;
+        return ResponseEntity.ok(queueService.getStatus(userId, rid));
     }
 
-    @Operation(
-            summary = "모든 놀이기구 대기열 정보 조회",
-            description = "모든 놀이기구의 프리미엄/일반 대기열의 대기 인원과 예상 대기 시간을 리스트로 반환합니다."
-    )
-    @ApiResponses({
-            @ApiResponse(
-                    responseCode = "200",
-                    description = "조회 성공",
-                    content = @Content(
-                            mediaType = "application/json",
-                            schema = @Schema(implementation = RideQueueInfoListResponse.class)
-                    )
-            ),
-            @ApiResponse(
-                    responseCode = "500",
-                    description = "서버 내부 오류"
-            )
-    })
-    @GetMapping("/rides/info")
-    public RideQueueInfoListResponse getAllRidesQueueInfo() {
-        logger.info("모든 놀이기구 대기열 정보 조회 요청");
-        RideQueueInfoListResponse response = queueService.getAllRidesQueueInfo();
-        logger.info("모든 놀이기구 대기열 정보 조회 응답 - 놀이기구수={}", response.rides().size());
-        return response;
+    @Operation(summary = "대기 미루기")
+    @PostMapping("/defer")
+    public ResponseEntity<DeferResponse> defer(@Valid @RequestBody DeferRequest request) {
+        Long rid = request.getUserId(); // TODO: JWT에서 추출
+        return ResponseEntity.ok(queueService.defer(request.getUserId(), request.getAttractionId(), rid));
     }
 
-    @Operation(
-            summary = "특정 놀이기구 대기열 정보 조회",
-            description = "특정 놀이기구의 프리미엄/일반 대기열의 대기 인원과 예상 대기 시간을 반환합니다."
-    )
-    @ApiResponses({
-            @ApiResponse(
-                    responseCode = "200",
-                    description = "조회 성공",
-                    content = @Content(
-                            mediaType = "application/json",
-                            schema = @Schema(implementation = com.skala.queue_server.dto.ride.RideQueueInfoDto.class)
-                    )
-            ),
-            @ApiResponse(
-                    responseCode = "400",
-                    description = "잘못된 요청 (존재하지 않는 놀이기구)"
-            ),
-            @ApiResponse(
-                    responseCode = "500",
-                    description = "서버 내부 오류"
-            )
-    })
-    @GetMapping("/rides/{rideId}/info")
-    public com.skala.queue_server.dto.ride.RideQueueInfoDto getRideQueueInfo(@PathVariable("rideId") Long rideId) {
-        logger.info("놀이기구 대기열 정보 조회 요청 - 놀이기구={}", rideId);
-        com.skala.queue_server.dto.ride.RideQueueInfoDto response = queueService.getRideQueueInfo(rideId);
-        logger.info("놀이기구 대기열 정보 조회 응답 - 놀이기구={} 프리미엄/일반 대기열정보수={}", rideId, response.waitTimes().size());
-        return response;
-    }
-
-    @Operation(
-            summary = "예약 취소 (대기열 제거)",
-            description = "사용자가 예약을 취소할 때 대기열에서 제거합니다. 대기열과 사용자 인덱스 모두에서 제거됩니다."
-    )
-    @ApiResponses({
-            @ApiResponse(
-                    responseCode = "200",
-                    description = "취소 성공"
-            ),
-            @ApiResponse(
-                    responseCode = "400",
-                    description = "잘못된 요청"
-            ),
-            @ApiResponse(
-                    responseCode = "500",
-                    description = "서버 내부 오류"
-            )
-    })
+    @Operation(summary = "대기열 취소")
     @PostMapping("/cancel")
-    public void cancelReservation(@RequestBody @Valid EnqueueRequest request) {
-        logger.info("예약 취소 API 요청 - 사용자={} 놀이기구={} 티켓타입={}",
-                request.userId(), request.rideId(), request.ticketType());
+    public ResponseEntity<CancelResponse> cancel(@Valid @RequestBody CancelRequest request) {
+        Long rid = request.getUserId(); // TODO: JWT에서 추출
+        return ResponseEntity.ok(queueService.cancel(request.getUserId(), request.getAttractionId(), rid));
+    }
 
-        queueService.cancelReservation(request.userId(), request.rideId(), request.ticketType());
+    @Operation(summary = "탑승 완료")
+    @PostMapping("/complete")
+    public ResponseEntity<CompleteResponse> complete(@Valid @RequestBody CompleteRequest request) {
+        Long rid = request.getUserId(); // TODO: JWT에서 추출
+        return ResponseEntity.ok(queueService.complete(
+                request.getUserId(), request.getAttractionId(), request.getRideCode(), rid));
+    }
 
-        logger.info("예약 취소 API 완료 - 사용자={} 놀이기구={}", request.userId(), request.rideId());
+    // ── 관리용: 놀이기구 메타 등록 ──────────────────────────────────────────
+    @Operation(summary = "[Admin] 놀이기구 메타 등록 (스케줄러 활성화)")
+    @PostMapping("/admin/meta")
+    public ResponseEntity<String> registerMeta(
+            @RequestParam Long attractionId,
+            @RequestParam int cyclingTimeSeconds,
+            @RequestParam int capacityPremium,
+            @RequestParam int capacityBasic) {
+        schedulerService.registerAttractionMeta(attractionId, cyclingTimeSeconds, capacityPremium, capacityBasic);
+        return ResponseEntity.ok("등록 완료");
     }
 }

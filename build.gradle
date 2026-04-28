@@ -9,9 +9,8 @@ version = '0.0.1-SNAPSHOT'
 description = 'Demo project for Spring Boot'
 
 java {
-	toolchain {
-		languageVersion = JavaLanguageVersion.of(17)
-	}
+	sourceCompatibility = JavaVersion.VERSION_21
+	targetCompatibility = JavaVersion.VERSION_21
 }
 
 configurations {
@@ -25,33 +24,20 @@ repositories {
 }
 
 dependencies {
-	// === Core Web (REST API) ===
 	implementation 'org.springframework.boot:spring-boot-starter-web'
-
-	// === Redis (Queue 핵심) ===
+	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
-
-	// === Validation (요청 검증) ===
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
-
-	// === Actuator (health 체크용, 선택이지만 추천) ===
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'
-
-	// Swagger (OpenAPI 3)
+	implementation 'org.springframework.boot:spring-boot-starter-webflux'
+	implementation 'org.springframework.kafka:spring-kafka'
 	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.5.0'
-
-	// === Lombok ===
+	runtimeOnly 'org.mariadb.jdbc:mariadb-java-client:3.3.3'
+	implementation 'org.flywaydb:flyway-core'
+	implementation 'org.flywaydb:flyway-mysql'
 	compileOnly 'org.projectlombok:lombok'
 	annotationProcessor 'org.projectlombok:lombok'
-
-	// WebClient
-	implementation 'org.springframework.boot:spring-boot-starter-webflux'
-
-	// === Test ===
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
-
-	// === Kafka ===
-	implementation 'org.springframework.kafka:spring-kafka'
 }
 
 tasks.named('test') {
