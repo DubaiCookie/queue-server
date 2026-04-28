@@ -11,7 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/queue/attractions")
+@RequestMapping("/queue")
 @RequiredArgsConstructor
 @Tag(name = "Queue API", description = "놀이기구 대기열 관리")
 public class QueueController {
@@ -20,7 +20,7 @@ public class QueueController {
     private final AttractionSchedulerService schedulerService;
 
     @Operation(summary = "대기열 등록")
-    @PostMapping("/enqueue")
+    @PostMapping("/attractions/enqueue")
     public ResponseEntity<EnqueueResponse> enqueue(@Valid @RequestBody EnqueueRequest request) {
         // TODO: JWT에서 requesterId 추출 (현재는 요청 userId 그대로 사용)
         EnqueueResponse response = queueService.enqueue(
@@ -33,7 +33,7 @@ public class QueueController {
     }
 
     @Operation(summary = "대기열 상태 조회")
-    @GetMapping("/status/{userId}")
+    @GetMapping("/attractions/status/{userId}")
     public ResponseEntity<QueueStatusResponse> getStatus(
             @PathVariable Long userId,
             @RequestAttribute(name = "authenticatedUserId", required = false) Long requesterId) {
@@ -43,21 +43,21 @@ public class QueueController {
     }
 
     @Operation(summary = "대기 미루기")
-    @PostMapping("/defer")
+    @PostMapping("/attractions/defer")
     public ResponseEntity<DeferResponse> defer(@Valid @RequestBody DeferRequest request) {
         Long rid = request.getUserId(); // TODO: JWT에서 추출
         return ResponseEntity.ok(queueService.defer(request.getUserId(), request.getAttractionId(), rid));
     }
 
     @Operation(summary = "대기열 취소")
-    @PostMapping("/cancel")
+    @PostMapping("/attractions/cancel")
     public ResponseEntity<CancelResponse> cancel(@Valid @RequestBody CancelRequest request) {
         Long rid = request.getUserId(); // TODO: JWT에서 추출
         return ResponseEntity.ok(queueService.cancel(request.getUserId(), request.getAttractionId(), rid));
     }
 
     @Operation(summary = "탑승 완료")
-    @PostMapping("/complete")
+    @PostMapping("/attractions/complete")
     public ResponseEntity<CompleteResponse> complete(@Valid @RequestBody CompleteRequest request) {
         Long rid = request.getUserId(); // TODO: JWT에서 추출
         return ResponseEntity.ok(queueService.complete(
@@ -66,7 +66,7 @@ public class QueueController {
 
     // ── 관리용: 놀이기구 메타 등록 ──────────────────────────────────────────
     @Operation(summary = "[Admin] 놀이기구 메타 등록 (스케줄러 활성화)")
-    @PostMapping("/admin/meta")
+    @PostMapping("/attractions/admin/meta")
     public ResponseEntity<String> registerMeta(
             @RequestParam Long attractionId,
             @RequestParam int cyclingTimeSeconds,
