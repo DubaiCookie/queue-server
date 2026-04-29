@@ -1,6 +1,8 @@
 package com.skala.queue_server.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.skala.queue_server.client.AttractionClient;
+import com.skala.queue_server.dto.AttractionCycleInfo;
 import com.skala.queue_server.entity.AttractionQueue;
 import com.skala.queue_server.entity.QueueStatus;
 import com.skala.queue_server.entity.TicketType;
@@ -23,10 +25,9 @@ import java.util.concurrent.atomic.AtomicLong;
 @RequiredArgsConstructor
 public class AttractionSchedulerService {
 
-    private static final String TOPIC            = "queue-available-event";
-    private static final String META_KEY         = "attraction:meta:%d";
-    private static final String LAST_DISPATCH_KEY = "attraction:last_dispatch:%d";
-    private static final String CYCLE_COUNTER_KEY = "attraction:cycle:%d:counter";
+    private static final String TOPIC              = "queue-available-event";
+    private static final String META_KEY           = "attraction:meta:%d";
+    private static final String LAST_DISPATCH_KEY  = "attraction:last_dispatch:%d";
     private static final String ACTIVE_ATTRACTIONS_KEY = "attraction:active_ids";
 
     @Value("${queue.noshow.timeout-minutes:5}")
@@ -36,6 +37,7 @@ public class AttractionSchedulerService {
     private final RedisTemplate<String, String> redisTemplate;
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final QueueService queueService;
+    private final AttractionClient attractionClient;
     private final ObjectMapper objectMapper;
 
     // ── WAITING → AVAILABLE 디스패치 (10초마다) ──────────────────────────────
@@ -66,9 +68,9 @@ public class AttractionSchedulerService {
 
         if (System.currentTimeMillis() - lastDispatch < cyclingTimeMs) return;
 
-        // 사이클 ID 증가
-        String cycleCounterKey = String.format(CYCLE_COUNTER_KEY, attractionId);
-        Long cycleId = redisTemplate.opsForValue().increment(cycleCounterKey);
+        // attraction-server에서 현재 실제 회차 ID 조회
+        AttractionCycleInfo cycleInfo = attractionClient.getCurrentCycle(attractionId);
+        Long cycleId = (cycleInfo != null) ? cycleInfo.getAttractionCycleId() : null;
 
         // PREMIUM → BASIC 순으로 디스패치
         for (TicketType ticketType : TicketType.values()) {
@@ -101,26 +103,25 @@ public class AttractionSchedulerService {
         repository.findByUserIdAndAttractionIdAndStatusIn(
                 userId, attractionId, List.of(QueueStatus.WAITING))
                 .ifPresent(queue -> {
-                    String rideCode = queueService.generateRideCode();
                     queue.setStatus(QueueStatus.AVAILABLE);
                     queue.setAttractionCycleId(cycleId);
-                    queue.setRideCode(rideCode);
                     repository.save(queue);
-                    sendAvailableEvent(queue, rideCode);
+                    sendAvailableEvent(queue);
                 });
     }
 
-    private void sendAvailableEvent(AttractionQueue queue, String rideCode) {
+    private void sendAvailableEvent(AttractionQueue queue) {
         try {
             Map<String, Object> event = new LinkedHashMap<>();
             event.put("attractionQueueId", queue.getAttractionQueueId());
             event.put("userId",            queue.getUserId());
             event.put("attractionId",      queue.getAttractionId());
-            event.put("rideCode",          rideCode);
             event.put("cycleId",           queue.getAttractionCycleId());
             event.put("status",            "AVAILABLE");
             kafkaTemplate.send(TOPIC, queue.getAttractionId().toString(),
                     objectMapper.writeValueAsString(event));
+            log.info("sent available event userId={} attractionId={} cycleId={}",
+                    queue.getUserId(), queue.getAttractionId(), queue.getAttractionCycleId());
         } catch (Exception e) {
             log.error("kafka send error", e);
         }

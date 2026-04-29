@@ -1,16 +1,14 @@
 package com.skala.queue_server.dto;
 
-import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 @Getter
 @NoArgsConstructor
-public class EnqueueRequest {
+public class IssuedTicketValidationResponse {
 
-    @NotNull
-    private Long attractionId;
-
-    @NotNull
     private Long issuedTicketId;
+    private Long ownerUserId;
+    private String ticketType;
+    private String entryStatus;
 }

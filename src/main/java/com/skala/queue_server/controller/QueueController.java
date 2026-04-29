@@ -5,8 +5,10 @@ import com.skala.queue_server.service.AttractionSchedulerService;
 import com.skala.queue_server.service.QueueService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -21,47 +23,52 @@ public class QueueController {
 
     @Operation(summary = "대기열 등록")
     @PostMapping("/attractions/enqueue")
-    public ResponseEntity<EnqueueResponse> enqueue(@Valid @RequestBody EnqueueRequest request) {
-        // TODO: JWT에서 requesterId 추출 (현재는 요청 userId 그대로 사용)
-        EnqueueResponse response = queueService.enqueue(
-                request.getUserId(),
-                request.getAttractionId(),
-                request.getIssuedTicketId(),
-                request.getTicketType()
-        );
-        return ResponseEntity.ok(response);
+    public ResponseEntity<EnqueueResponse> enqueue(
+            @Valid @RequestBody EnqueueRequest request,
+            HttpServletRequest httpRequest) {
+        Long userId = (Long) httpRequest.getAttribute("authenticatedUserId");
+        if (userId == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        return ResponseEntity.ok(queueService.enqueue(
+                userId, request.getAttractionId(), request.getIssuedTicketId()));
     }
 
     @Operation(summary = "대기열 상태 조회")
-    @GetMapping("/attractions/status/{userId}")
-    public ResponseEntity<QueueStatusResponse> getStatus(
-            @PathVariable Long userId,
-            @RequestAttribute(name = "authenticatedUserId", required = false) Long requesterId) {
-        // TODO: JWT 필터 연동 후 requesterId 활용
-        Long rid = requesterId != null ? requesterId : userId;
-        return ResponseEntity.ok(queueService.getStatus(userId, rid));
+    @GetMapping("/attractions/status")
+    public ResponseEntity<QueueStatusResponse> getStatus(HttpServletRequest httpRequest) {
+        Long userId = (Long) httpRequest.getAttribute("authenticatedUserId");
+        if (userId == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        return ResponseEntity.ok(queueService.getStatus(userId, userId));
     }
 
     @Operation(summary = "대기 미루기")
     @PostMapping("/attractions/defer")
-    public ResponseEntity<DeferResponse> defer(@Valid @RequestBody DeferRequest request) {
-        Long rid = request.getUserId(); // TODO: JWT에서 추출
-        return ResponseEntity.ok(queueService.defer(request.getUserId(), request.getAttractionId(), rid));
+    public ResponseEntity<DeferResponse> defer(
+            @Valid @RequestBody DeferRequest request,
+            HttpServletRequest httpRequest) {
+        Long userId = (Long) httpRequest.getAttribute("authenticatedUserId");
+        if (userId == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        return ResponseEntity.ok(queueService.defer(userId, request.getAttractionId(), userId));
     }
 
     @Operation(summary = "대기열 취소")
     @PostMapping("/attractions/cancel")
-    public ResponseEntity<CancelResponse> cancel(@Valid @RequestBody CancelRequest request) {
-        Long rid = request.getUserId(); // TODO: JWT에서 추출
-        return ResponseEntity.ok(queueService.cancel(request.getUserId(), request.getAttractionId(), rid));
+    public ResponseEntity<CancelResponse> cancel(
+            @Valid @RequestBody CancelRequest request,
+            HttpServletRequest httpRequest) {
+        Long userId = (Long) httpRequest.getAttribute("authenticatedUserId");
+        if (userId == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        return ResponseEntity.ok(queueService.cancel(userId, request.getAttractionId(), userId));
     }
 
     @Operation(summary = "탑승 완료")
     @PostMapping("/attractions/complete")
-    public ResponseEntity<CompleteResponse> complete(@Valid @RequestBody CompleteRequest request) {
-        Long rid = request.getUserId(); // TODO: JWT에서 추출
+    public ResponseEntity<CompleteResponse> complete(
+            @Valid @RequestBody CompleteRequest request,
+            HttpServletRequest httpRequest) {
+        Long userId = (Long) httpRequest.getAttribute("authenticatedUserId");
+        if (userId == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         return ResponseEntity.ok(queueService.complete(
-                request.getUserId(), request.getAttractionId(), request.getRideCode(), rid));
+                userId, request.getAttractionId(), userId));
     }
 
     // ── 관리용: 놀이기구 메타 등록 ──────────────────────────────────────────

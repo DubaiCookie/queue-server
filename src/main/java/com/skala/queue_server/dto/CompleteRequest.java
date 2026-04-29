@@ -9,11 +9,5 @@ import lombok.NoArgsConstructor;
 public class CompleteRequest {
 
     @NotNull
-    private Long userId;
-
-    @NotNull
     private Long attractionId;
-
-    @NotNull
-    private String rideCode;
 }
