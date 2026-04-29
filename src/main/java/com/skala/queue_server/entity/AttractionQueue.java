@@ -39,8 +39,6 @@ public class AttractionQueue {
     @Column(name = "status", nullable = false, length = 20)
     private QueueStatus status;
 
-    @Column(name = "ride_code", length = 50)
-    private String rideCode;
 
     @Column(name = "defer_count", nullable = false)
     private int deferCount;

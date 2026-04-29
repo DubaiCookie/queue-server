@@ -9,4 +9,5 @@ public class EnqueueResponse {
 
     private int position;
     private int estimatedMinutes;
+    private int estimatedCycleNumber;
 }

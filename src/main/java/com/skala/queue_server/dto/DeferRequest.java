@@ -9,8 +9,5 @@ import lombok.NoArgsConstructor;
 public class DeferRequest {
 
     @NotNull
-    private Long userId;
-
-    @NotNull
     private Long attractionId;
 }
