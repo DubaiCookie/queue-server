@@ -23,6 +23,8 @@ public interface AttractionQueueRepository extends JpaRepository<AttractionQueue
 
     List<AttractionQueue> findByStatusAndUpdatedAtBefore(QueueStatus status, LocalDateTime before);
 
+    List<AttractionQueue> findByStatusIn(List<QueueStatus> statuses);
+
     List<AttractionQueue> findByAttractionIdAndTicketTypeAndStatus(
             Long attractionId, TicketType ticketType, QueueStatus status);
 }
