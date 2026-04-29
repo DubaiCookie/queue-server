@@ -319,6 +319,31 @@ public class QueueService {
         return attraction != null ? attraction.getAttractionName() : "attraction-" + attractionId;
     }
 
+    // ── 놀이기구 대기 정보 조회 (attraction-server용) ────────────────────────
+    public WaitingInfoResponse getWaitingInfo(Long attractionId) {
+        // PREMIUM 대기열
+        String queueKeyPremium = String.format(QUEUE_KEY, attractionId, TicketType.PREMIUM.name());
+        Long premiumQueueSize = redisTemplate.opsForZSet().size(queueKeyPremium);
+        int premiumCount = premiumQueueSize != null ? premiumQueueSize.intValue() : 0;
+        int premiumMinutes = calcEstimatedMinutes(getMetaKey(attractionId), TicketType.PREMIUM, premiumCount);
+
+        // BASIC 대기열
+        String queueKeyBasic = String.format(QUEUE_KEY, attractionId, TicketType.BASIC.name());
+        Long basicQueueSize = redisTemplate.opsForZSet().size(queueKeyBasic);
+        int basicCount = basicQueueSize != null ? basicQueueSize.intValue() : 0;
+        int basicMinutes = calcEstimatedMinutes(getMetaKey(attractionId), TicketType.BASIC, basicCount);
+
+        log.info("waiting info attractionId={} premium=(count={}, minutes={}) basic=(count={}, minutes={})",
+                attractionId, premiumCount, premiumMinutes, basicCount, basicMinutes);
+
+        return new WaitingInfoResponse(
+                attractionId,
+                premiumMinutes,
+                basicMinutes,
+                premiumCount,
+                basicCount
+        );
+    }
 
     public String getQueueKey(Long attractionId, TicketType ticketType) {
         return String.format(QUEUE_KEY, attractionId, ticketType.name());
