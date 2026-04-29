@@ -3,6 +3,7 @@ package com.skala.queue_server.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.skala.queue_server.client.AttractionClient;
 import com.skala.queue_server.dto.AttractionCycleInfo;
+import com.skala.queue_server.dto.WaitingInfoResponse;
 import com.skala.queue_server.entity.AttractionQueue;
 import com.skala.queue_server.entity.QueueStatus;
 import com.skala.queue_server.entity.TicketType;
@@ -25,9 +26,10 @@ import java.util.concurrent.atomic.AtomicLong;
 @RequiredArgsConstructor
 public class AttractionSchedulerService {
 
-    private static final String TOPIC              = "queue-available-event";
-    private static final String META_KEY           = "attraction:meta:%d";
-    private static final String LAST_DISPATCH_KEY  = "attraction:last_dispatch:%d";
+    private static final String TOPIC_AVAILABLE     = "queue-available-event";
+    private static final String TOPIC_STATUS        = "queue-status-event";
+    private static final String META_KEY            = "attraction:meta:%d";
+    private static final String LAST_DISPATCH_KEY   = "attraction:last_dispatch:%d";
     private static final String ACTIVE_ATTRACTIONS_KEY = "attraction:active_ids";
 
     @Value("${queue.noshow.timeout-minutes:5}")
@@ -97,6 +99,24 @@ public class AttractionSchedulerService {
 
         redisTemplate.opsForValue().set(lastDispatchKey, String.valueOf(System.currentTimeMillis()));
         log.info("dispatched attractionId={} cycleId={}", attractionId, cycleId);
+
+        sendStatusEvent(attractionId);
+    }
+
+    private void sendStatusEvent(Long attractionId) {
+        try {
+            WaitingInfoResponse info = queueService.getWaitingInfo(attractionId);
+            Map<String, Object> event = new LinkedHashMap<>();
+            event.put("attractionId",          info.getAttractionId());
+            event.put("waitingMinutesPremium", info.getWaitingMinutesPremium());
+            event.put("waitingMinutesBasic",   info.getWaitingMinutesBasic());
+            event.put("queueCountPremium",     info.getQueueCountPremium());
+            event.put("queueCountBasic",       info.getQueueCountBasic());
+            kafkaTemplate.send(TOPIC_STATUS, attractionId.toString(),
+                    objectMapper.writeValueAsString(event));
+        } catch (Exception e) {
+            log.error("queue-status-event send error attractionId={}", attractionId, e);
+        }
     }
 
     private void makeAvailable(Long userId, Long attractionId, TicketType ticketType, Long cycleId) {
@@ -118,7 +138,7 @@ public class AttractionSchedulerService {
             event.put("attractionId",      queue.getAttractionId());
             event.put("cycleId",           queue.getAttractionCycleId());
             event.put("status",            "AVAILABLE");
-            kafkaTemplate.send(TOPIC, queue.getAttractionId().toString(),
+            kafkaTemplate.send(TOPIC_AVAILABLE, queue.getAttractionId().toString(),
                     objectMapper.writeValueAsString(event));
             log.info("sent available event userId={} attractionId={} cycleId={}",
                     queue.getUserId(), queue.getAttractionId(), queue.getAttractionCycleId());
