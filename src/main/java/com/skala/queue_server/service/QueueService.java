@@ -227,7 +227,14 @@ public class QueueService {
 
         AttractionQueue queue = repository
                 .findByUserIdAndAttractionIdAndStatusIn(userId, attractionId, ACTIVE)
-                .orElseThrow(() -> new QueueException(ErrorCode.QUEUE_NOT_FOUND));
+                .orElseGet(() -> repository
+                        .findFirstByUserIdAndAttractionIdAndStatusOrderByUpdatedAtDesc(
+                                userId, attractionId, QueueStatus.COMPLETED)
+                        .orElseThrow(() -> new QueueException(ErrorCode.QUEUE_NOT_FOUND)));
+
+        if (queue.getStatus() == QueueStatus.COMPLETED) {
+            throw new QueueException(ErrorCode.QUEUE_ALREADY_COMPLETED);
+        }
 
         if (queue.getStatus() != QueueStatus.AVAILABLE) {
             throw new QueueException(ErrorCode.QUEUE_STATUS_NOT_AVAILABLE);

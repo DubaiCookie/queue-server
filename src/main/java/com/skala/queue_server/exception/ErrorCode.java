@@ -23,7 +23,7 @@ public enum ErrorCode {
     TICKET_NOT_ENTERED(HttpStatus.CONFLICT,              "입장 처리된 티켓만 줄서기할 수 있습니다."),
     DEFER_LIMIT_EXCEEDED(HttpStatus.CONFLICT,            "미루기 횟수를 초과했습니다."),
     QUEUE_STATUS_NOT_AVAILABLE(HttpStatus.CONFLICT,      "현재 미루기가 불가능한 상태입니다."),
-    QUEUE_ALREADY_COMPLETED(HttpStatus.CONFLICT,         "이미 완료된 대기열입니다."),
+    QUEUE_ALREADY_COMPLETED(HttpStatus.CONFLICT,         "이미 탑승했습니다."),
     INVALID_RIDE_CODE(HttpStatus.CONFLICT,               "탑승 코드가 올바르지 않습니다.");
 
     private final HttpStatus httpStatus;
