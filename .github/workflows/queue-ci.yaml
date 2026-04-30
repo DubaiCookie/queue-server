@@ -8,6 +8,7 @@ on:
   workflow_dispatch:
 
 env:
+  AWS_ACCOUNT_ID: 881490135253
   AWS_REGION: ap-northeast-2
   ECR_REPOSITORY: skala3-cloud1-team3-queue-server
   IMAGE_NAME: team3-queue-server
@@ -37,10 +38,6 @@ jobs:
       - name: Build bootJar
         run: ./gradlew clean bootJar -x test --no-daemon
 
-      - name: Get AWS Account ID
-        id: aws-account
-        run: echo "account_id=${{ secrets.AWS_ACCOUNT_ID }}" >> "$GITHUB_OUTPUT"
-
       - name: Resolve image tag
         id: vars
         run: |
@@ -50,7 +47,6 @@ jobs:
           else
             IMAGE_TAG="${GITHUB_REF_NAME}-${SHORT_SHA}"
           fi
-          AWS_ACCOUNT_ID="${{ steps.aws-account.outputs.account_id }}"
           ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
           IMAGE_BASE="${ECR_REGISTRY}/${ECR_REPOSITORY}"
           echo "image_tag=${IMAGE_TAG}"                          >> "$GITHUB_OUTPUT"
