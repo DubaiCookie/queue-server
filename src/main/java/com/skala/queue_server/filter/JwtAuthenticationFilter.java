@@ -28,6 +28,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if ("OPTIONS".equalsIgnoreCase(method)) return true;
         if (path.startsWith("/swagger-ui") || path.startsWith("/v3/api-docs")) return true;
         if (path.equals("/actuator/health")) return true;
+        if (path.matches("/queue/attractions/\\d+/waiting-info") && "GET".equalsIgnoreCase(method)) return true;
 
         return false;
     }
