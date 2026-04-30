@@ -20,6 +20,7 @@ public enum ErrorCode {
     ALREADY_IN_QUEUE(HttpStatus.CONFLICT,                "이미 해당 놀이기구 대기열에 등록되어 있습니다."),
     ATTRACTION_NOT_ACTIVE(HttpStatus.CONFLICT,           "현재 운영 중이지 않는 놀이기구입니다."),
     TICKET_ALREADY_USED(HttpStatus.CONFLICT,             "이미 사용된 티켓입니다."),
+    TICKET_NOT_ENTERED(HttpStatus.CONFLICT,              "입장 처리된 티켓만 줄서기할 수 있습니다."),
     DEFER_LIMIT_EXCEEDED(HttpStatus.CONFLICT,            "미루기 횟수를 초과했습니다."),
     QUEUE_STATUS_NOT_AVAILABLE(HttpStatus.CONFLICT,      "현재 미루기가 불가능한 상태입니다."),
     QUEUE_ALREADY_COMPLETED(HttpStatus.CONFLICT,         "이미 완료된 대기열입니다."),

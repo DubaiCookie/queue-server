@@ -136,14 +136,29 @@ public class AttractionSchedulerService {
             event.put("attractionQueueId", queue.getAttractionQueueId());
             event.put("userId",            queue.getUserId());
             event.put("attractionId",      queue.getAttractionId());
+            event.put("attractionName",    getAttractionName(queue.getAttractionId()));
+            event.put("ticketType",        queue.getTicketType().name());
             event.put("cycleId",           queue.getAttractionCycleId());
             event.put("status",            "AVAILABLE");
             kafkaTemplate.send(TOPIC_AVAILABLE, queue.getAttractionId().toString(),
                     objectMapper.writeValueAsString(event));
+            queueService.publishUserStatusEvent(queue.getUserId());
             log.info("sent available event userId={} attractionId={} cycleId={}",
                     queue.getUserId(), queue.getAttractionId(), queue.getAttractionCycleId());
         } catch (Exception e) {
             log.error("kafka send error", e);
+        }
+    }
+
+    private String getAttractionName(Long attractionId) {
+        String metaKey = String.format(META_KEY, attractionId);
+        Object cached = redisTemplate.opsForHash().get(metaKey, "attractionName");
+        if (cached != null) return cached.toString();
+        try {
+            var attraction = attractionClient.getAttraction(attractionId);
+            return attraction != null ? attraction.getAttractionName() : "attraction-" + attractionId;
+        } catch (Exception e) {
+            return "attraction-" + attractionId;
         }
     }
 

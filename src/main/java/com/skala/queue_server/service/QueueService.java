@@ -1,5 +1,6 @@
 package com.skala.queue_server.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.skala.queue_server.client.AttractionClient;
 import com.skala.queue_server.client.TicketClient;
 import com.skala.queue_server.dto.*;
@@ -13,6 +14,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,6 +28,7 @@ public class QueueService {
     private static final String QUEUE_KEY           = "queue:attraction:%d:%s";
     private static final String META_KEY            = "attraction:meta:%d";
     private static final String ACTIVE_ATTRACTIONS  = "attraction:active_ids";
+    private static final String TOPIC_USER_STATUS   = "queue-user-status-event";
     private static final List<QueueStatus> ACTIVE   = List.of(QueueStatus.WAITING, QueueStatus.AVAILABLE);
 
     @Value("${queue.defer.max-count:3}")
@@ -35,6 +38,8 @@ public class QueueService {
     private final RedisTemplate<String, String> redisTemplate;
     private final AttractionClient attractionClient;
     private final TicketClient ticketClient;
+    private final KafkaTemplate<String, String> kafkaTemplate;
+    private final ObjectMapper objectMapper;
 
     // ── 대기열 등록 ──────────────────────────────────────────────────────────
     @Transactional
@@ -47,8 +52,8 @@ public class QueueService {
         if (!userId.equals(ticketInfo.getOwnerUserId())) {
             throw new QueueException(ErrorCode.FORBIDDEN);
         }
-        if (!"AVAILABLE".equals(ticketInfo.getEntryStatus())) {
-            throw new QueueException(ErrorCode.TICKET_ALREADY_USED);
+        if (!"USED".equals(ticketInfo.getEntryStatus())) {
+            throw new QueueException(ErrorCode.TICKET_NOT_ENTERED);
         }
         TicketType ticketType = parseTicketType(ticketInfo.getTicketType());
 
@@ -68,8 +73,7 @@ public class QueueService {
         if (repository.existsByUserIdAndAttractionIdAndStatusIn(userId, attractionId, ACTIVE)) {
             throw new QueueException(ErrorCode.ALREADY_IN_QUEUE);
         }
-        if (repository.existsByIssuedTicketIdAndStatusIn(issuedTicketId,
-                List.of(QueueStatus.WAITING, QueueStatus.AVAILABLE, QueueStatus.COMPLETED))) {
+        if (repository.existsByIssuedTicketIdAndStatusIn(issuedTicketId, ACTIVE)) {
             throw new QueueException(ErrorCode.TICKET_ALREADY_USED);
         }
 
@@ -99,6 +103,8 @@ public class QueueService {
                 .build();
         repository.save(queue);
 
+        publishUserStatusEvent(userId);
+
         return new EnqueueResponse(position, estimated, estimatedCycleNumber);
     }
 
@@ -113,14 +119,16 @@ public class QueueService {
                 .stream().map(q -> {
                     String queueKey = String.format(QUEUE_KEY, q.getAttractionId(), q.getTicketType().name());
                     String metaKey  = String.format(META_KEY, q.getAttractionId());
-                    int position    = getPosition(queueKey, userId);
+                    int position    = q.getStatus() == QueueStatus.AVAILABLE ? 0 : getPosition(queueKey, userId);
                     int estimated   = calcEstimatedMinutes(metaKey, q.getTicketType(), position);
                     return new QueueStatusItem(
                             q.getAttractionId(),
                             getAttractionName(q.getAttractionId()),
                             q.getTicketType().name(),
+                            q.getStatus().name(),
                             position,
-                            estimated
+                            estimated,
+                            q.getDeferCount()
                     );
                 }).toList();
 
@@ -194,6 +202,8 @@ public class QueueService {
         log.info("deferred userId={} attractionId={} deferCount={} oldCycleId={} newCycleId={} newPosition={} newCycleNumber={}",
                 userId, attractionId, queue.getDeferCount(), queue.getAttractionCycleId(), newAttractionCycleId, newPosition, newEstimatedCycleNumber);
 
+        publishUserStatusEvent(userId);
+
         return new DeferResponse(attractionId, newPosition, queue.getDeferCount(), estimated);
     }
 
@@ -215,6 +225,8 @@ public class QueueService {
 
         queue.setStatus(QueueStatus.CANCELED);
         repository.save(queue);
+
+        publishUserStatusEvent(userId);
 
         return new CancelResponse("대기열 취소 완료", attractionId);
     }
@@ -242,7 +254,18 @@ public class QueueService {
         log.info("completed userId={} attractionId={} cycleId={}",
                 userId, attractionId, queue.getAttractionCycleId());
 
+        publishUserStatusEvent(userId);
+
         return new CompleteResponse("탑승 완료", attractionId);
+    }
+
+    public void publishUserStatusEvent(Long userId) {
+        try {
+            QueueStatusResponse status = getStatus(userId, userId);
+            kafkaTemplate.send(TOPIC_USER_STATUS, userId.toString(), objectMapper.writeValueAsString(status));
+        } catch (Exception e) {
+            log.warn("queue-user-status-event send error userId={}: {}", userId, e.getMessage());
+        }
     }
 
     // ── 내부 헬퍼 ─────────────────────────────────────────────────────────────

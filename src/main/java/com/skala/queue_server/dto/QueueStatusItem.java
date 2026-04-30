@@ -10,6 +10,8 @@ public class QueueStatusItem {
     private Long attractionId;
     private String attractionName;
     private String ticketType;
+    private String status;
     private int position;
     private int estimatedMinutes;
+    private int deferCount;
 }
