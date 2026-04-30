@@ -22,6 +22,10 @@ public class MockQueueDataGenerator {
 
     private static final Logger logger = LoggerFactory.getLogger(MockQueueDataGenerator.class);
     private static final String QUEUE_KEY_PREFIX = "queue:attraction:";
+    private static final String META_KEY_PREFIX = "attraction:meta:";
+    private static final String ACTIVE_ATTRACTIONS_KEY = "attraction:active_ids";
+    private static final int FAST_CYCLE_RIDE_ID = 7;
+    private static final int FAST_CYCLE_SECONDS = 30;
     private static final Random random = new Random();
 
     private final RedisTemplate<String, String> redisTemplate;
@@ -42,6 +46,7 @@ public class MockQueueDataGenerator {
                 totalUsers += createInitialQueue(rideId);
             }
 
+            registerFastCycleMeta(FAST_CYCLE_RIDE_ID);
             logger.info("=== 대기열 초기화 완료 - 총 {}명 대기 중 ===", totalUsers);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -63,6 +68,16 @@ public class MockQueueDataGenerator {
         } catch (Exception e) {
             logger.error("대기열 보충 중 오류 발생", e);
         }
+    }
+
+    private void registerFastCycleMeta(int rideId) {
+        RideCapacity cap = getRideCapacity(rideId);
+        String metaKey = META_KEY_PREFIX + rideId;
+        redisTemplate.opsForHash().put(metaKey, "cyclingTimeSeconds", String.valueOf(FAST_CYCLE_SECONDS));
+        redisTemplate.opsForHash().put(metaKey, "capacityPremium", String.valueOf(cap.capacityPremium()));
+        redisTemplate.opsForHash().put(metaKey, "capacityBasic", String.valueOf(cap.capacityBasic()));
+        redisTemplate.opsForSet().add(ACTIVE_ATTRACTIONS_KEY, String.valueOf(rideId));
+        logger.info("테스트용 빠른 사이클 등록 - 놀이기구 {} (cyclingTimeSeconds={}초)", rideId, FAST_CYCLE_SECONDS);
     }
 
     private int createInitialQueue(int rideId) {
@@ -180,7 +195,7 @@ public class MockQueueDataGenerator {
             case 4  -> new RideCapacity(180,   8, 22);
             case 5  -> new RideCapacity(240,   7, 28);
             case 6  -> new RideCapacity(360,   3, 12);
-            case 7  -> new RideCapacity(120,  12, 38);
+            case 7  -> new RideCapacity(FAST_CYCLE_SECONDS, 12, 38);
             case 8  -> new RideCapacity(180,  10, 30);
             case 9  -> new RideCapacity(180,   8, 30);
             case 10 -> new RideCapacity(300,   6, 19);
