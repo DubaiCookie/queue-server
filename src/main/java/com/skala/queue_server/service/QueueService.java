@@ -73,10 +73,6 @@ public class QueueService {
         if (repository.existsByUserIdAndAttractionIdAndStatusIn(userId, attractionId, ACTIVE)) {
             throw new QueueException(ErrorCode.ALREADY_IN_QUEUE);
         }
-        if (repository.existsByIssuedTicketIdAndStatusIn(issuedTicketId, ACTIVE)) {
-            throw new QueueException(ErrorCode.TICKET_ALREADY_USED);
-        }
-
         String queueKey = String.format(QUEUE_KEY, attractionId, ticketType.name());
 
         // 내 대기 순번 계산을 위해 추가 전 현재 크기 확인
