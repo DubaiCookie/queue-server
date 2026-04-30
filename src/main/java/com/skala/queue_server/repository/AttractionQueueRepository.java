@@ -27,4 +27,7 @@ public interface AttractionQueueRepository extends JpaRepository<AttractionQueue
 
     List<AttractionQueue> findByAttractionIdAndTicketTypeAndStatus(
             Long attractionId, TicketType ticketType, QueueStatus status);
+
+    Optional<AttractionQueue> findFirstByUserIdAndAttractionIdAndTicketTypeAndStatusOrderByCreatedAtDesc(
+            Long userId, Long attractionId, TicketType ticketType, QueueStatus status);
 }

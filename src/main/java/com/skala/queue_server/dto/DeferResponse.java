@@ -10,5 +10,7 @@ public class DeferResponse {
     private Long attractionId;
     private int newPosition;
     private int deferCount;
+    private int maxDeferCount;
+    private int deferredCycles;
     private int estimatedMinutes;
 }

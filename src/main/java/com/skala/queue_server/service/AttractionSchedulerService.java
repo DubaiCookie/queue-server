@@ -27,13 +27,18 @@ import java.util.concurrent.atomic.AtomicLong;
 public class AttractionSchedulerService {
 
     private static final String TOPIC_AVAILABLE     = "queue-available-event";
+    private static final String TOPIC_ALMOST_READY  = "queue-almost-ready-event";
     private static final String TOPIC_STATUS        = "queue-status-event";
     private static final String META_KEY            = "attraction:meta:%d";
     private static final String LAST_DISPATCH_KEY   = "attraction:last_dispatch:%d";
+    private static final String ALMOST_READY_NOTIFIED_KEY = "queue:almost_ready_notified:%d";
     private static final String ACTIVE_ATTRACTIONS_KEY = "attraction:active_ids";
 
     @Value("${queue.noshow.timeout-minutes:5}")
     private int noShowTimeoutMinutes;
+
+    @Value("${queue.almost-ready.cycles-before:2}")
+    private int almostReadyCyclesBefore;
 
     private final AttractionQueueRepository repository;
     private final RedisTemplate<String, String> redisTemplate;
@@ -83,6 +88,8 @@ public class AttractionSchedulerService {
             int capacity = Integer.parseInt(capacityObj.toString());
             String queueKey = queueService.getQueueKey(attractionId, ticketType);
 
+            sendAlmostReadyEvents(attractionId, ticketType, capacity, queueKey);
+
             Set<String> topUsers = redisTemplate.opsForZSet().range(queueKey, 0, capacity - 1);
             if (topUsers == null || topUsers.isEmpty()) continue;
 
@@ -119,6 +126,31 @@ public class AttractionSchedulerService {
         }
     }
 
+    private void sendAlmostReadyEvents(Long attractionId, TicketType ticketType, int capacity, String queueKey) {
+        if (capacity <= 0 || almostReadyCyclesBefore <= 0) return;
+
+        int startRank = capacity;
+        int endRank = (capacity * almostReadyCyclesBefore) - 1;
+        if (endRank < startRank) return;
+
+        Set<String> almostReadyUsers = redisTemplate.opsForZSet().range(queueKey, startRank, endRank);
+        if (almostReadyUsers == null || almostReadyUsers.isEmpty()) return;
+
+        for (String userIdStr : almostReadyUsers) {
+            Long userId = Long.parseLong(userIdStr);
+            repository.findFirstByUserIdAndAttractionIdAndTicketTypeAndStatusOrderByCreatedAtDesc(
+                    userId, attractionId, ticketType, QueueStatus.WAITING)
+                    .ifPresent(queue -> {
+                        String notifiedKey = String.format(ALMOST_READY_NOTIFIED_KEY, queue.getAttractionQueueId());
+                        Boolean alreadyNotified = redisTemplate.hasKey(notifiedKey);
+                        if (Boolean.TRUE.equals(alreadyNotified)) return;
+
+                        redisTemplate.opsForValue().set(notifiedKey, "true");
+                        sendAlmostReadyEvent(queue);
+                    });
+        }
+    }
+
     private void makeAvailable(Long userId, Long attractionId, TicketType ticketType, Long cycleId) {
         repository.findByUserIdAndAttractionIdAndStatusIn(
                 userId, attractionId, List.of(QueueStatus.WAITING))
@@ -147,6 +179,25 @@ public class AttractionSchedulerService {
                     queue.getUserId(), queue.getAttractionId(), queue.getAttractionCycleId());
         } catch (Exception e) {
             log.error("kafka send error", e);
+        }
+    }
+
+    private void sendAlmostReadyEvent(AttractionQueue queue) {
+        try {
+            Map<String, Object> event = new LinkedHashMap<>();
+            event.put("attractionQueueId", queue.getAttractionQueueId());
+            event.put("userId",            queue.getUserId());
+            event.put("attractionId",      queue.getAttractionId());
+            event.put("attractionName",    getAttractionName(queue.getAttractionId()));
+            event.put("ticketType",        queue.getTicketType().name());
+            event.put("status",            "ALMOST_READY");
+            event.put("cyclesBefore",      almostReadyCyclesBefore);
+            kafkaTemplate.send(TOPIC_ALMOST_READY, queue.getAttractionId().toString(),
+                    objectMapper.writeValueAsString(event));
+            log.info("sent almost-ready event userId={} attractionId={} cyclesBefore={}",
+                    queue.getUserId(), queue.getAttractionId(), almostReadyCyclesBefore);
+        } catch (Exception e) {
+            log.error("kafka almost-ready send error", e);
         }
     }
 

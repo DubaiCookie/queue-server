@@ -18,7 +18,9 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 @Slf4j
 @Service
@@ -28,11 +30,15 @@ public class QueueService {
     private static final String QUEUE_KEY           = "queue:attraction:%d:%s";
     private static final String META_KEY            = "attraction:meta:%d";
     private static final String ACTIVE_ATTRACTIONS  = "attraction:active_ids";
+    private static final String ALMOST_READY_NOTIFIED_KEY = "queue:almost_ready_notified:%d";
     private static final String TOPIC_USER_STATUS   = "queue-user-status-event";
     private static final List<QueueStatus> ACTIVE   = List.of(QueueStatus.WAITING, QueueStatus.AVAILABLE);
 
     @Value("${queue.defer.max-count:3}")
     private int maxDeferCount;
+
+    @Value("${queue.defer.cycles:3}")
+    private int deferCycles;
 
     private final AttractionQueueRepository repository;
     private final RedisTemplate<String, String> redisTemplate;
@@ -157,9 +163,6 @@ public class QueueService {
 
         AttractionQueue queue = findActive(userId, attractionId);
 
-        if (queue.getStatus() != QueueStatus.AVAILABLE) {
-            throw new QueueException(ErrorCode.QUEUE_STATUS_NOT_AVAILABLE);
-        }
         if (queue.getDeferCount() >= maxDeferCount) {
             throw new QueueException(ErrorCode.DEFER_LIMIT_EXCEEDED);
         }
@@ -167,40 +170,26 @@ public class QueueService {
         String queueKey = String.format(QUEUE_KEY, attractionId, queue.getTicketType().name());
         String metaKey = String.format(META_KEY, attractionId);
 
-        // 미루기 후 새로운 위치를 계산하기 위해 queue 크기 확인
-        Long currentQueueSize = redisTemplate.opsForZSet().size(queueKey);
-        int queueSizeBefore = currentQueueSize != null ? currentQueueSize.intValue() : 0;
-
-        // Redis에 사용자 추가 (대기 큐의 맨 뒤로)
-        // 점수(score)는 현재 타임스탐프로 설정하여 가장 뒤에 배치
-        redisTemplate.opsForZSet().add(queueKey, userId.toString(), System.currentTimeMillis());
-
-        // 미루어진 후의 새로운 회차 계산
-        // queueSizeBefore: 미루기 전 큐의 다른 사용자 수
-        // 이를 기반으로 사용자가 언제쯤 차례가 될지 예상
-        int newEstimatedCycleNumber = calcEstimatedCycleNumber(attractionId, metaKey, queue.getTicketType(), queueSizeBefore);
-
-        // 계산된 회차번호가 실제로 존재하는 회차인지 확인 및 cycleId 조회
-        // attraction-server 호출 실패 시 null 반환되며, 이는 허용됨
-        // (Scheduler가 나중에 처리할 때까지 WAITING 상태 유지)
+        int capacity = getCapacity(metaKey, queue.getTicketType());
+        int newPosition = moveBackByCycles(queueKey, userId, capacity, deferCycles);
+        int newEstimatedCycleNumber = calcEstimatedCycleNumber(
+                attractionId, metaKey, queue.getTicketType(), Math.max(newPosition - 1, 0));
         Long newAttractionCycleId = resolveAttractionCycleId(attractionId, newEstimatedCycleNumber);
 
-        // DB 업데이트: 상태, 미루기 횟수, 예약된 회차 정보 업데이트
         queue.setStatus(QueueStatus.WAITING);
         queue.setDeferCount(queue.getDeferCount() + 1);
-        queue.setAttractionCycleId(newAttractionCycleId);  // 새로운 예상 회차로 업데이트 (핵심!)
+        queue.setAttractionCycleId(newAttractionCycleId);
         repository.save(queue);
 
-        int newPosition = getPosition(queueKey, userId);
         int estimated   = calcEstimatedMinutes(metaKey, queue.getTicketType(), newPosition);
+        redisTemplate.delete(String.format(ALMOST_READY_NOTIFIED_KEY, queue.getAttractionQueueId()));
 
-        // 미루기 과정에서의 상태 변화를 로그로 기록 (모니터링/디버깅용)
-        log.info("deferred userId={} attractionId={} deferCount={} oldCycleId={} newCycleId={} newPosition={} newCycleNumber={}",
-                userId, attractionId, queue.getDeferCount(), queue.getAttractionCycleId(), newAttractionCycleId, newPosition, newEstimatedCycleNumber);
+        log.info("deferred userId={} attractionId={} deferCount={} cycles={} newCycleId={} newPosition={} newCycleNumber={}",
+                userId, attractionId, queue.getDeferCount(), deferCycles, newAttractionCycleId, newPosition, newEstimatedCycleNumber);
 
         publishUserStatusEvent(userId);
 
-        return new DeferResponse(attractionId, newPosition, queue.getDeferCount(), estimated);
+        return new DeferResponse(attractionId, newPosition, queue.getDeferCount(), maxDeferCount, deferCycles, estimated);
     }
 
     // ── 대기열 취소 ───────────────────────────────────────────────────────────
@@ -273,6 +262,41 @@ public class QueueService {
     private int getPosition(String queueKey, Long userId) {
         Long rank = redisTemplate.opsForZSet().rank(queueKey, userId.toString());
         return rank == null ? 0 : (int) (rank + 1);
+    }
+
+    private int moveBackByCycles(String queueKey, Long userId, int capacity, int cycles) {
+        String member = userId.toString();
+        Long currentRankObj = redisTemplate.opsForZSet().rank(queueKey, member);
+        int currentRank = currentRankObj == null ? -1 : currentRankObj.intValue();
+
+        redisTemplate.opsForZSet().remove(queueKey, member);
+
+        Set<String> currentMembers = redisTemplate.opsForZSet().range(queueKey, 0, -1);
+        List<String> orderedMembers = new ArrayList<>(currentMembers == null ? List.of() : currentMembers);
+
+        int shift = Math.max(capacity, 1) * Math.max(cycles, 1);
+        int targetIndex = Math.min(Math.max(currentRank, -1) + shift, orderedMembers.size());
+        if (targetIndex < 0) targetIndex = 0;
+
+        orderedMembers.add(targetIndex, member);
+
+        long baseScore = System.currentTimeMillis();
+        for (int i = 0; i < orderedMembers.size(); i++) {
+            redisTemplate.opsForZSet().add(queueKey, orderedMembers.get(i), baseScore + i);
+        }
+
+        return targetIndex + 1;
+    }
+
+    private int getCapacity(String metaKey, TicketType ticketType) {
+        try {
+            Object capacityObj = redisTemplate.opsForHash().get(metaKey,
+                    ticketType == TicketType.PREMIUM ? "capacityPremium" : "capacityBasic");
+            if (capacityObj == null) return 1;
+            return Math.max(Integer.parseInt(capacityObj.toString()), 1);
+        } catch (Exception e) {
+            return 1;
+        }
     }
 
     private int calcEstimatedMinutes(String metaKey, TicketType ticketType, int position) {
