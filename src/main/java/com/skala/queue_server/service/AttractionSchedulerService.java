@@ -17,9 +17,9 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicLong;
 
 @Slf4j
 @Service
@@ -32,6 +32,7 @@ public class AttractionSchedulerService {
     private static final String META_KEY            = "attraction:meta:%d";
     private static final String LAST_DISPATCH_KEY   = "attraction:last_dispatch:%d";
     private static final String ALMOST_READY_NOTIFIED_KEY = "queue:almost_ready_notified:%d";
+    private static final String USER_STATUS_BROADCAST_LOCK_KEY = "queue:user_status:broadcast_lock";
     private static final String ACTIVE_ATTRACTIONS_KEY = "attraction:active_ids";
 
     @Value("${queue.noshow.timeout-minutes:5}")
@@ -40,12 +41,35 @@ public class AttractionSchedulerService {
     @Value("${queue.almost-ready.cycles-before:2}")
     private int almostReadyCyclesBefore;
 
+    @Value("${queue.user-status.broadcast-interval-ms:10000}")
+    private long userStatusBroadcastIntervalMs;
+
     private final AttractionQueueRepository repository;
     private final RedisTemplate<String, String> redisTemplate;
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final QueueService queueService;
     private final AttractionClient attractionClient;
     private final ObjectMapper objectMapper;
+
+    // ── 개인 대기 순번/시간 브로드캐스트 ─────────────────────────────────────
+    @Scheduled(fixedDelayString = "${queue.user-status.broadcast-interval-ms:10000}")
+    public void broadcastActiveUserStatuses() {
+        Boolean locked = redisTemplate.opsForValue().setIfAbsent(
+                USER_STATUS_BROADCAST_LOCK_KEY,
+                String.valueOf(System.currentTimeMillis()),
+                Duration.ofMillis(Math.max(userStatusBroadcastIntervalMs - 500, 1000))
+        );
+        if (!Boolean.TRUE.equals(locked)) return;
+
+        List<Long> userIds = repository.findDistinctUserIdsByStatusIn(
+                List.of(QueueStatus.WAITING, QueueStatus.AVAILABLE));
+        for (Long userId : userIds) {
+            queueService.publishUserStatusEvent(userId);
+        }
+        if (!userIds.isEmpty()) {
+            log.debug("broadcasted active queue statuses users={}", userIds.size());
+        }
+    }
 
     // ── WAITING → AVAILABLE 디스패치 (10초마다) ──────────────────────────────
     @Scheduled(fixedDelay = 10000)
