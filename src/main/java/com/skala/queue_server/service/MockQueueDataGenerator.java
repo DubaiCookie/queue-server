@@ -81,6 +81,13 @@ public class MockQueueDataGenerator {
     }
 
     private int createInitialQueue(int rideId) {
+        if (rideId == FAST_CYCLE_RIDE_ID) {
+            addUsersToQueue(rideId, "PREMIUM", 5);
+            addUsersToQueue(rideId, "BASIC", 20);
+            logger.info("놀이기구 {} 테스트용 소규모 초기화 - PREMIUM:5명 BASIC:20명", rideId);
+            return 25;
+        }
+
         RideCapacity capacity = getRideCapacity(rideId);
         int popularity = getPopularity(rideId);
 
@@ -119,6 +126,23 @@ public class MockQueueDataGenerator {
     }
 
     private int refillQueueIfNeeded(int rideId) {
+        if (rideId == FAST_CYCLE_RIDE_ID) {
+            int added = 0;
+            String basicKey = QUEUE_KEY_PREFIX + rideId + ":BASIC";
+            Long basicSize = redisTemplate.opsForZSet().size(basicKey);
+            if (basicSize == null || basicSize < 10) {
+                addUsersToQueue(rideId, "BASIC", 10);
+                added += 10;
+            }
+            String premiumKey = QUEUE_KEY_PREFIX + rideId + ":PREMIUM";
+            Long premiumSize = redisTemplate.opsForZSet().size(premiumKey);
+            if (premiumSize == null || premiumSize < 3) {
+                addUsersToQueue(rideId, "PREMIUM", 3);
+                added += 3;
+            }
+            return added;
+        }
+
         RideCapacity capacity = getRideCapacity(rideId);
         int popularity = getPopularity(rideId);
         int added = 0;
