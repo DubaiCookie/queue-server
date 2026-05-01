@@ -57,4 +57,30 @@ public class AttractionClient {
             return null;
         }
     }
+
+    /**
+     * 회차 얼굴 분석을 즉시 트리거한다(fire-and-forget).
+     *
+     * 사용자가 "탑승 완료"를 누른 시점에 attraction-server의 분석 파이프라인을
+     * 즉시 깨우기 위해 호출한다. 응답을 기다리지 않으며 실패해도 탑승 완료
+     * 처리는 영향받지 않는다(스케줄러가 결국 보완 처리).
+     */
+    public void triggerCycleAnalysis(Long cycleId) {
+        if (cycleId == null) {
+            log.debug("Skip triggerCycleAnalysis: cycleId is null");
+            return;
+        }
+        try {
+            webClient.post()
+                    .uri(attractionServerUrl + "/attractions/cycles/{cycleId}/trigger-analysis", cycleId)
+                    .retrieve()
+                    .bodyToMono(Void.class)
+                    .subscribe(
+                            unused -> log.info("triggered cycle analysis cycleId={}", cycleId),
+                            err -> log.warn("triggerCycleAnalysis failed cycleId={}: {}", cycleId, err.getMessage())
+                    );
+        } catch (Exception e) {
+            log.warn("triggerCycleAnalysis dispatch failed cycleId={}: {}", cycleId, e.getMessage());
+        }
+    }
 }

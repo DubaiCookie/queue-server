@@ -219,6 +219,11 @@ public class QueueService {
     // ── 탑승 완료 ─────────────────────────────────────────────────────────────
     // 사용자가 AVAILABLE 상태일 때 탑승 버튼을 누르면 호출
     // 탑승 코드 검증 없이 AVAILABLE 상태만 확인하고 COMPLETED로 처리
+    //
+    // 추가 동작: COMPLETED 처리 직후 attraction-server에 회차 얼굴 분석을 즉시 트리거한다.
+    // 이렇게 해야 사용자가 "탑승 완료"를 누른 시점에 사진 분석 파이프라인이 곧장 시작되어
+    // 실제 회차 종료 시각(cycle endTime)까지 기다리지 않고도 사진을 받을 수 있다.
+    // 단체 사진에 사용자가 포함되었는지 검증하는 얼굴 매칭 로직은 분석 파이프라인 내부에서 그대로 유지된다.
     @Transactional
     public CompleteResponse complete(Long userId, Long attractionId, Long requesterId) {
         if (!userId.equals(requesterId)) {
@@ -247,6 +252,9 @@ public class QueueService {
                 userId, attractionId, queue.getAttractionCycleId());
 
         publishUserStatusEvent(userId);
+
+        // fire-and-forget: 사진 분석 트리거 실패가 탑승 완료 응답을 막지 않도록 비동기 처리
+        attractionClient.triggerCycleAnalysis(queue.getAttractionCycleId());
 
         return new CompleteResponse("탑승 완료", attractionId);
     }
