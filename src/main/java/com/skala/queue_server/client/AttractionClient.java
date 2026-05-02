@@ -59,35 +59,32 @@ public class AttractionClient {
     }
 
     /**
-     * 회차 얼굴 분석을 즉시 트리거한다(fire-and-forget).
+     * 사용자 단위 단체사진 매칭을 즉시 트리거한다(fire-and-forget).
      *
-     * 사용자가 "탑승 완료"를 누른 시점에 attraction-server의 분석 파이프라인을
-     * 즉시 깨우기 위해 호출한다. userId가 함께 전달되면 attraction-server는 해당
-     * 회차의 모든 사진에 대해 사용자 매핑(AttractionImageUser)을 즉시 생성하여
-     * /my-photos 페이지에서 얼굴 매칭 결과를 기다리지 않고 회차가 노출되도록 한다.
+     * 사용자가 "탑승 완료"를 누른 시점에 attraction-server를 거쳐 ai-server에
+     * (userId, attractionId) 만으로 매칭 작업을 위임한다. ai-server가 photos/
+     * 전체 스캔 + 얼굴 매칭 + 썸네일 생성/업로드 + attraction-server 콜백까지
+     * 일괄 처리한다. 회차(cycle) 컬럼은 참조하지 않는다.
      *
      * 응답을 기다리지 않으며 실패해도 탑승 완료 처리는 영향받지 않는다.
      */
-    public void triggerCycleAnalysis(Long cycleId, Long userId) {
-        if (cycleId == null) {
-            log.debug("Skip triggerCycleAnalysis: cycleId is null");
+    public void requestUserPhotoMatch(Long userId, Long attractionId) {
+        if (userId == null || attractionId == null) {
+            log.debug("Skip requestUserPhotoMatch: userId={} attractionId={}", userId, attractionId);
             return;
         }
         try {
-            String path = userId != null
-                    ? attractionServerUrl + "/attractions/cycles/{cycleId}/trigger-analysis?userId={userId}"
-                    : attractionServerUrl + "/attractions/cycles/{cycleId}/trigger-analysis";
-            WebClient.RequestHeadersSpec<?> spec = userId != null
-                    ? webClient.post().uri(path, cycleId, userId)
-                    : webClient.post().uri(path, cycleId);
-            spec.retrieve()
+            webClient.post()
+                    .uri(attractionServerUrl + "/attractions/users/photo-match")
+                    .bodyValue(java.util.Map.of("userId", userId, "attractionId", attractionId))
+                    .retrieve()
                     .bodyToMono(Void.class)
                     .subscribe(
-                            unused -> log.info("triggered cycle analysis cycleId={} userId={}", cycleId, userId),
-                            err -> log.warn("triggerCycleAnalysis failed cycleId={} userId={}: {}", cycleId, userId, err.getMessage())
+                            unused -> log.info("dispatched user-photo-match userId={} attractionId={}", userId, attractionId),
+                            err -> log.warn("requestUserPhotoMatch failed userId={} attractionId={}: {}", userId, attractionId, err.getMessage())
                     );
         } catch (Exception e) {
-            log.warn("triggerCycleAnalysis dispatch failed cycleId={} userId={}: {}", cycleId, userId, e.getMessage());
+            log.warn("requestUserPhotoMatch dispatch failed userId={} attractionId={}: {}", userId, attractionId, e.getMessage());
         }
     }
 }
