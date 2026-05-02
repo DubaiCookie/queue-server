@@ -253,22 +253,9 @@ public class QueueService {
 
         publishUserStatusEvent(userId);
 
-        // fire-and-forget: 사진 분석 트리거 실패가 탑승 완료 응답을 막지 않도록 비동기 처리
-        // queue.attractionCycleId 가 null 인 케이스(스케줄러 디스패치 시 attraction-server 응답이
-        // 없었던 경우 등)를 대비해 attraction-server에 현재 회차를 다시 조회하여 폴백한다.
-        Long cycleId = queue.getAttractionCycleId();
-        if (cycleId == null) {
-            try {
-                AttractionCycleInfo currentCycle = attractionClient.getCurrentCycle(attractionId);
-                if (currentCycle != null) {
-                    cycleId = currentCycle.getAttractionCycleId();
-                }
-            } catch (Exception e) {
-                log.warn("complete: failed to resolve current cycle for attractionId={}: {}",
-                        attractionId, e.getMessage());
-            }
-        }
-        attractionClient.triggerCycleAnalysis(cycleId, userId);
+        // fire-and-forget: 사용자 단위 단체사진 매칭 트리거.
+        // 회차 컬럼은 참조하지 않고 (userId, attractionId)만으로 ai-server에 위임한다.
+        attractionClient.requestUserPhotoMatch(userId, attractionId);
 
         return new CompleteResponse("탑승 완료", attractionId);
     }
